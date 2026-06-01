@@ -33,6 +33,9 @@ import sqlite3
 @st.cache_data
 def carregar_dados():
 
+    st.write(df.columns.tolist())
+st.stop()
+
     con = sqlite3.connect(
         "banco.db"
     )
