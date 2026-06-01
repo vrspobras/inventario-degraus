@@ -23,25 +23,25 @@ def carregar():
 
     st.sidebar.title("Dados")
 
-arquivo = st.sidebar.file_uploader(
-    "Selecione fotos_processadas_km_real.xlsx",
-    type=["xlsx"]
-)
-
-if arquivo is None:
-
-    st.info(
-        "Selecione a planilha para iniciar."
+    arquivo = st.sidebar.file_uploader(
+        "Selecione fotos_processadas_km_real.xlsx",
+        type=["xlsx"]
     )
 
-    st.stop()
+    if arquivo is None:
 
-df = pd.read_excel(arquivo)
+        st.info(
+            "Selecione a planilha para iniciar."
+        )
+
+        st.stop()
+
+    df = pd.read_excel(arquivo)
 
     return df
 
-df = carregar()
 
+df = carregar()
 # =========================================
 # Tratamento
 # =========================================
