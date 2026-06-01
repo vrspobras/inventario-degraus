@@ -4,7 +4,6 @@ import plotly.express as px
 import folium
 
 from streamlit_folium import st_folium
-from tkinter import Tk, filedialog
 
 # =========================================
 # Página
@@ -22,18 +21,22 @@ st.set_page_config(
 @st.cache_data
 def carregar():
 
-    root = Tk()
-    root.withdraw()
+    st.sidebar.title("Dados")
 
-    arquivo = filedialog.askopenfilename(
-        title="Selecione fotos_processadas_km_real.xlsx",
-        filetypes=[("Excel","*.xlsx")]
+arquivo = st.sidebar.file_uploader(
+    "Selecione fotos_processadas_km_real.xlsx",
+    type=["xlsx"]
+)
+
+if arquivo is None:
+
+    st.info(
+        "Selecione a planilha para iniciar."
     )
 
-    if not arquivo:
-        st.stop()
+    st.stop()
 
-    df = pd.read_excel(arquivo)
+df = pd.read_excel(arquivo)
 
     return df
 
