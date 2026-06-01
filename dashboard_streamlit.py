@@ -14,30 +14,39 @@ st.set_page_config(
     layout="wide"
 )
 
-# =========================================
-# Upload da planilha
-# =========================================
+pagina = st.sidebar.radio(
 
-st.sidebar.title("Dados")
+    "Menu",
 
-arquivo = st.sidebar.file_uploader(
-    "Selecione fotos_processadas_km_real.xlsx",
-    type=["xlsx"]
+    [
+        "Dashboard",
+        "Cadastrar Fotos"
+    ]
+
 )
+import sqlite3
 
-if arquivo is None:
-
-    st.info(
-        "Selecione a planilha para iniciar."
-    )
-
-    st.stop()
+# =========================================
+# Banco SQLite
+# =========================================
 
 @st.cache_data
-def carregar_excel(arquivo):
-    return pd.read_excel(arquivo)
+def carregar_dados():
 
-df = carregar_excel(arquivo)
+    con = sqlite3.connect(
+        "banco.db"
+    )
+
+    df = pd.read_sql(
+        "SELECT * FROM fotos",
+        con
+    )
+
+    con.close()
+
+    return df
+
+df = carregar_dados()
 # =========================================
 # Tratamento
 # =========================================
@@ -136,9 +145,11 @@ dff = dff[
 # Título
 # =========================================
 
-st.title(
-    "🚧 Inventário de Degraus"
-)
+if pagina == "Dashboard":
+
+    st.title(
+        "🚧 Inventário de Degraus"
+    )
 
 # =========================================
 # Cards
@@ -359,3 +370,43 @@ st.dataframe(
 
     use_container_width=True
 )
+# =========================================
+# CADASTRO
+# =========================================
+
+if pagina == "Cadastrar Fotos":
+
+    st.title(
+        "📷 Cadastrar Fotos"
+    )
+
+    fotos = st.file_uploader(
+
+        "Selecione as fotos",
+
+        type=[
+            "jpg",
+            "jpeg",
+            "png"
+        ],
+
+        accept_multiple_files=True
+
+    )
+
+    if fotos:
+
+        st.success(
+            f"{len(fotos)} fotos carregadas"
+        )
+
+        st.dataframe(
+            pd.DataFrame(
+                {
+                    "Arquivo":[
+                        f.name
+                        for f in fotos
+                    ]
+                }
+            )
+        )
