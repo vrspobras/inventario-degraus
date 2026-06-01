@@ -15,33 +15,29 @@ st.set_page_config(
 )
 
 # =========================================
-# Selecionar planilha
+# Upload da planilha
 # =========================================
 
-@st.cache_data
-def carregar():
+st.sidebar.title("Dados")
 
-    st.sidebar.title("Dados")
+arquivo = st.sidebar.file_uploader(
+    "Selecione fotos_processadas_km_real.xlsx",
+    type=["xlsx"]
+)
 
-    arquivo = st.sidebar.file_uploader(
-        "Selecione fotos_processadas_km_real.xlsx",
-        type=["xlsx"]
+if arquivo is None:
+
+    st.info(
+        "Selecione a planilha para iniciar."
     )
 
-    if arquivo is None:
+    st.stop()
 
-        st.info(
-            "Selecione a planilha para iniciar."
-        )
+@st.cache_data
+def carregar_excel(arquivo):
+    return pd.read_excel(arquivo)
 
-        st.stop()
-
-    df = pd.read_excel(arquivo)
-
-    return df
-
-
-df = carregar()
+df = carregar_excel(arquivo)
 # =========================================
 # Tratamento
 # =========================================
