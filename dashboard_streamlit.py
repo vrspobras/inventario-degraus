@@ -26,35 +26,71 @@ pagina = st.sidebar.radio(
 )
 import sqlite3
 
-# =========================================
-# Banco SQLite
-# =========================================
-
 @st.cache_data
 def carregar_dados():
-
-    st.write(df.columns.tolist())
-st.stop()
 
     con = sqlite3.connect(
         "banco.db"
     )
 
-    df = pd.read_sql(
-        "SELECT * FROM fotos",
-        con
-    )
+    try:
+
+        df = pd.read_sql(
+            "SELECT * FROM fotos",
+            con
+        )
+
+    except:
+
+        df = pd.DataFrame(
+            columns=[
+                "arquivo",
+                "rodovia",
+                "km_real",
+                "sentido",
+                "latitude",
+                "longitude",
+                "degrau",
+                "data",
+                "ocr_bruto"
+            ]
+        )
 
     con.close()
 
     return df
 
 df = carregar_dados()
+
+# padronizar nomes para o dashboard antigo
+
+df = df.rename(
+    columns={
+        "arquivo":"Arquivo",
+        "rodovia":"Rodovia Encontrada",
+        "km_real":"KM Real",
+        "sentido":"Sentido",
+        "latitude":"Latitude",
+        "longitude":"Longitude",
+        "degrau":"Degrau",
+        "data":"Data"
+    }
+)
 # =========================================
 # Tratamento
 # =========================================
 
-df["KM Real"] = pd.to_numeric(
+if len(df):
+
+    df["KM Real"] = pd.to_numeric(
+        df["KM Real"],
+        errors="coerce"
+    )
+
+    df["Degrau"] = pd.to_numeric(
+        df["Degrau"],
+        errors="coerce"
+    )
     df["KM Real"],
     errors="coerce"
 )
