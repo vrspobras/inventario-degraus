@@ -170,7 +170,7 @@ def carregar_kmz():
                     registro
                 )
 
-                _marcos.append({
+               todos_os_marcos.append({
 
                     "rodovia": rodovia,
 
@@ -203,7 +203,7 @@ def carregar_kmz():
         )
 
     return (
-        _marcos,
+        todos_os_marcos,
         rodovias
     )
 
@@ -951,6 +951,14 @@ if pagina == "Cadastrar Fotos":
                 "Recalcular KM"
             ):
 
+                            st.session_state[
+                "resultado_editado"
+            ] = resultado_editado
+
+            if st.button(
+                "Recalcular KM"
+            ):
+
                 tabela = st.session_state[
                     "resultado_editado"
                 ].copy()
@@ -988,7 +996,7 @@ if pagina == "Cadastrar Fotos":
                             "KM Real"
                         ] = km_real
 
-                    except:
+                    except Exception:
                         pass
 
                 st.session_state[
@@ -1005,6 +1013,13 @@ if pagina == "Cadastrar Fotos":
                     key="editor_ocr_recalc"
                 )
 
+            if st.button(
+                "Salvar Cadastro"
+            ):
+
+                st.warning(
+                    "Integração SQLite ainda será feita"
+                )
             if st.button(
                 "Salvar Cadastro"
             ):
