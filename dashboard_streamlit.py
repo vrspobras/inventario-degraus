@@ -565,10 +565,10 @@ if pagina == "Cadastrar Fotos":
         return lat, lon
 
     # =====================================
-    # PROCESSAR
-    # =====================================
+# PROCESSAR
+# =====================================
 
-    if fotos:
+if fotos:
 
     if st.button("Processar Fotos"):
 
@@ -580,84 +580,83 @@ if pagina == "Cadastrar Fotos":
 
         for i, foto in enumerate(fotos):
 
-                try:
+            try:
 
-                    img = Image.open(
-                        foto
-                    )
-
-                    legenda = recortar_legenda(
-                        img
-                    )
-
-                    texto_lido = reader.readtext(
-                        np.array(legenda),
-                        detail=0,
-                        paragraph=False
-                    )
-
-                    texto = "\n".join(
-                        texto_lido
-                    )
-
-                    rodovia = extrair_rodovia(
-                        texto
-                    )
-
-                    sentido = extrair_sentido(
-                        texto
-                    )
-
-                    data = extrair_data(
-                        texto
-                    )
-
-                    lat, lon = extrair_coordenadas(
-                        texto
-                    )
-
-                    dados.append({
-
-                        "Arquivo": foto.name,
-
-                        "Rodovia": rodovia,
-
-                        "Sentido": sentido,
-
-                        "Latitude": lat,
-
-                        "Longitude": lon,
-
-                        "Data": data,
-
-                        "OCR Bruto": texto
-
-                    })
-
-                except Exception as e:
-
-                    dados.append({
-
-                        "Arquivo": foto.name,
-
-                        "Rodovia": None,
-
-                        "Sentido": None,
-
-                        "Latitude": None,
-
-                        "Longitude": None,
-
-                        "Data": None,
-
-                        "OCR Bruto": str(e)
-
-                    })
-
-                barra.progress(
-                    (i + 1) / total
+                img = Image.open(
+                    foto
                 )
-  # AQUI DENTRO DO BOTÃO
+
+                legenda = recortar_legenda(
+                    img
+                )
+
+                texto_lido = reader.readtext(
+                    np.array(legenda),
+                    detail=0,
+                    paragraph=False
+                )
+
+                texto = "\n".join(
+                    texto_lido
+                )
+
+                rodovia = extrair_rodovia(
+                    texto
+                )
+
+                sentido = extrair_sentido(
+                    texto
+                )
+
+                data = extrair_data(
+                    texto
+                )
+
+                lat, lon = extrair_coordenadas(
+                    texto
+                )
+
+                dados.append({
+
+                    "Arquivo": foto.name,
+
+                    "Rodovia": rodovia,
+
+                    "Sentido": sentido,
+
+                    "Latitude": lat,
+
+                    "Longitude": lon,
+
+                    "Data": data,
+
+                    "OCR Bruto": texto
+
+                })
+
+            except Exception as e:
+
+                dados.append({
+
+                    "Arquivo": foto.name,
+
+                    "Rodovia": None,
+
+                    "Sentido": None,
+
+                    "Latitude": None,
+
+                    "Longitude": None,
+
+                    "Data": None,
+
+                    "OCR Bruto": str(e)
+
+                })
+
+            barra.progress(
+                (i + 1) / total
+            )
 
         resultado = pd.DataFrame(
             dados
