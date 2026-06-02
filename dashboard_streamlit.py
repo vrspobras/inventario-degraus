@@ -564,139 +564,104 @@ if pagina == "Cadastrar Fotos":
 
         return lat, lon
 
-    # =====================================
+# =====================================
 # PROCESSAR
 # =====================================
 
-if fotos:
+    if fotos:
 
-    if st.button("Processar Fotos"):
+        if st.button("Processar Fotos"):
 
-        dados = []
+            dados = []
 
-        barra = st.progress(0)
+            barra = st.progress(0)
 
-        total = len(fotos)
+            total = len(fotos)
 
-        for i, foto in enumerate(fotos):
+            for i, foto in enumerate(fotos):
 
-            try:
+                try:
 
-                img = Image.open(
-                    foto
-                )
+                    img = Image.open(foto)
 
-                legenda = recortar_legenda(
-                    img
-                )
+                    legenda = recortar_legenda(img)
 
-                texto_lido = reader.readtext(
-                    np.array(legenda),
-                    detail=0,
-                    paragraph=False
-                )
+                    texto_lido = reader.readtext(
+                        np.array(legenda),
+                        detail=0,
+                        paragraph=False
+                    )
 
-                texto = "\n".join(
-                    texto_lido
-                )
+                    texto = "\n".join(texto_lido)
 
-                rodovia = extrair_rodovia(
-                    texto
-                )
+                    rodovia = extrair_rodovia(texto)
 
-                sentido = extrair_sentido(
-                    texto
-                )
+                    sentido = extrair_sentido(texto)
 
-                data = extrair_data(
-                    texto
-                )
+                    data = extrair_data(texto)
 
-                lat, lon = extrair_coordenadas(
-                    texto
-                )
+                    lat, lon = extrair_coordenadas(texto)
 
-                dados.append({
+                    dados.append({
 
-                    "Arquivo": foto.name,
+                        "Arquivo": foto.name,
+                        "Rodovia": rodovia,
+                        "Sentido": sentido,
+                        "Latitude": lat,
+                        "Longitude": lon,
+                        "Data": data,
+                        "OCR Bruto": texto
 
-                    "Rodovia": rodovia,
+                    })
 
-                    "Sentido": sentido,
+                except Exception as e:
 
-                    "Latitude": lat,
+                    dados.append({
 
-                    "Longitude": lon,
+                        "Arquivo": foto.name,
+                        "Rodovia": None,
+                        "Sentido": None,
+                        "Latitude": None,
+                        "Longitude": None,
+                        "Data": None,
+                        "OCR Bruto": str(e)
 
-                    "Data": data,
+                    })
 
-                    "OCR Bruto": texto
+                barra.progress((i + 1) / total)
 
-                })
+            resultado = pd.DataFrame(dados)
 
-            except Exception as e:
+            resultado["KM Real"] = None
+            resultado["Degrau"] = None
 
-                dados.append({
-
-                    "Arquivo": foto.name,
-
-                    "Rodovia": None,
-
-                    "Sentido": None,
-
-                    "Latitude": None,
-
-                    "Longitude": None,
-
-                    "Data": None,
-
-                    "OCR Bruto": str(e)
-
-                })
-
-            barra.progress(
-                (i + 1) / total
+            st.success(
+                f"{len(resultado)} fotos processadas"
             )
 
-        resultado = pd.DataFrame(
-            dados
-        )
-
-        resultado["KM Real"] = None
-        resultado["Degrau"] = None
-
-        st.success(
-            f"{len(resultado)} fotos processadas"
-        )
-
-        resultado_editado = st.data_editor(
-
-            resultado,
-
-            use_container_width=True,
-
-            num_rows="fixed",
-
-            key="editor_ocr"
-
-        )
-
-        st.session_state[
-            "resultado_editado"
-        ] = resultado_editado
-
-        if st.button(
-            "Recalcular KM"
-        ):
-
-            st.warning(
-                "Integração do KM Real será o próximo passo"
+            resultado_editado = st.data_editor(
+                resultado,
+                use_container_width=True,
+                num_rows="fixed",
+                key="editor_ocr"
             )
 
-        if st.button(
-            "Salvar Cadastro"
-        ):
+            st.session_state[
+                "resultado_editado"
+            ] = resultado_editado
 
-            st.warning(
-                "Integração SQLite será o próximo passo"
-            )
+            if st.button(
+                "Recalcular KM"
+            ):
+
+                st.warning(
+                    "Integração KM Real ainda será feita"
+                )
+
+            if st.button(
+                "Salvar Cadastro"
+            ):
+
+                st.warning(
+                    "Integração SQLite ainda será feita"
+                )
