@@ -659,14 +659,45 @@ if pagina == "Cadastrar Fotos":
                 )
 
             resultado = pd.DataFrame(
-                dados
-            )
+    dados
+)
 
-            st.success(
-                f"{len(resultado)} fotos processadas"
-            )
+resultado["KM Real"] = None
+resultado["Degrau"] = None
 
-            st.dataframe(
-                resultado,
-                use_container_width=True
-            )
+st.success(
+    f"{len(resultado)} fotos processadas"
+)
+
+resultado_editado = st.data_editor(
+
+    resultado,
+
+    use_container_width=True,
+
+    num_rows="fixed",
+
+    key="editor_ocr"
+
+)
+
+st.session_state[
+    "resultado_editado"
+] = resultado_editado
+
+
+if st.button(
+    "Recalcular KM"
+):
+
+    st.warning(
+        "Próxima etapa: integrar cálculo KM Real"
+    )
+
+if st.button(
+    "Salvar Cadastro"
+):
+
+    st.warning(
+        "Próxima etapa: salvar SQLite"
+    )
