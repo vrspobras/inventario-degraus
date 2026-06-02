@@ -170,7 +170,7 @@ def carregar_kmz():
                     registro
                 )
 
-               todos_os_marcos.append({
+           todos_os_marcos.append({
 
                     "rodovia": rodovia,
 
@@ -181,7 +181,6 @@ def carregar_kmz():
                     "lon": lon
 
                 })
-
         for sub in folder.findall(
             "kml:Folder",
             ns
