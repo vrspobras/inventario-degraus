@@ -2,6 +2,10 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 import folium
+import zipfile
+import xml.etree.ElementTree as ET
+import numpy as np
+import re
 
 from streamlit_folium import st_folium
 
@@ -23,6 +27,297 @@ pagina = st.sidebar.radio(
         "Cadastrar Fotos"
     ]
 
+# =========================================
+# KMZ
+# =========================================
+
+@st.cache_resource
+def carregar_kmz():
+
+    todos_os_marcos = []
+    rodovias = {}
+
+    with zipfile.ZipFile(
+        "kmz_rodovias.kmz",
+        "r"
+    ) as z:
+
+        kml_file = [
+            x for x in z.namelist()
+            if x.endswith(".kml")
+        ][0]
+
+        conteudo = z.read(
+            kml_file
+        )
+
+    rootxml = ET.fromstring(
+        conteudo
+    )
+
+    ns = {
+        "kml":
+        "http://www.opengis.net/kml/2.2"
+    }
+
+    def normalizar_rodovia(txt):
+
+        txt = str(txt).upper()
+
+        m = re.search(
+            r'(SPA\s*\d+/\d+)',
+            txt
+        )
+
+        if m:
+            return m.group(1).replace(
+                " ",
+                "-"
+            )
+
+        m = re.search(
+            r'(SP\s*\d+)',
+            txt
+        )
+
+        if m:
+            return m.group(1).replace(
+                " ",
+                "-"
+            )
+
+        return txt.strip()
+
+    def process_folder(folder):
+
+        nome = folder.find(
+            "kml:name",
+            ns
+        )
+
+        nome_folder = (
+            nome.text
+            if nome is not None
+            else ""
+        )
+
+        rodovia = None
+
+        m = re.search(
+            r'(SPA\s*\d+/\d+|SP\s*\d+)',
+            nome_folder.upper()
+        )
+
+        if m:
+
+            rodovia = normalizar_rodovia(
+                m.group()
+            )
+
+        if rodovia:
+
+            rodovias.setdefault(
+                rodovia,
+                []
+            )
+
+            for pm in folder.findall(
+                "kml:Placemark",
+                ns
+            ):
+
+                nm = pm.find(
+                    "kml:name",
+                    ns
+                )
+
+                pt = pm.find(
+                    ".//kml:Point/kml:coordinates",
+                    ns
+                )
+
+                if nm is None or pt is None:
+                    continue
+
+                km_match = re.search(
+                    r'(\d+(?:[.,]\d+)?)',
+                    str(nm.text)
+                )
+
+                if not km_match:
+                    continue
+
+                km = float(
+                    km_match.group(1)
+                    .replace(",", ".")
+                )
+
+                lon, lat, *_ = map(
+                    float,
+                    pt.text.strip().split(",")
+                )
+
+                registro = (
+                    km,
+                    lat,
+                    lon
+                )
+
+                rodovias[
+                    rodovia
+                ].append(
+                    registro
+                )
+
+                todos_os_marcos.append({
+
+                    "rodovia": rodovia,
+
+                    "km": km,
+
+                    "lat": lat,
+
+                    "lon": lon
+
+                })
+
+        for sub in folder.findall(
+            "kml:Folder",
+            ns
+        ):
+            process_folder(sub)
+
+    for folder in rootxml.findall(
+        ".//kml:Folder",
+        ns
+    ):
+        process_folder(folder)
+
+    for rodovia in rodovias:
+
+        rodovias[
+            rodovia
+        ].sort(
+            key=lambda x: x[0]
+        )
+
+    return (
+        todos_os_marcos,
+        rodovias
+    )
+
+TODOS_OS_MARCOS, RODOVIAS = carregar_kmz()
+   def distancia(
+    lat1,
+    lon1,
+    lat2,
+    lon2
+):
+
+    return np.sqrt(
+        (lat1 - lat2)**2 +
+        (lon1 - lon2)**2
+    )
+
+def descobrir_rodovia(
+    lat,
+    lon
+):
+
+    menor = None
+
+    for marco in TODOS_OS_MARCOS:
+
+        d = distancia(
+            lat,
+            lon,
+            marco["lat"],
+            marco["lon"]
+        )
+
+        if (
+            menor is None
+            or d < menor[0]
+        ):
+
+            menor = (
+                d,
+                marco["rodovia"]
+            )
+
+    return menor[1]
+
+def calcular_km_real(
+    rodovia,
+    lat,
+    lon
+):
+
+    dados = RODOVIAS[
+        rodovia
+    ]
+
+    melhor_dist = None
+    melhor_km = None
+
+    for i in range(
+        len(dados)-1
+    ):
+
+        km1, lat1, lon1 = dados[i]
+        km2, lat2, lon2 = dados[i+1]
+
+        abx = lon2 - lon1
+        aby = lat2 - lat1
+
+        apx = lon - lon1
+        apy = lat - lat1
+
+        ab2 = (
+            abx*abx +
+            aby*aby
+        )
+
+        if ab2 == 0:
+            continue
+
+        t = (
+            apx*abx +
+            apy*aby
+        ) / ab2
+
+        t = max(
+            0,
+            min(1, t)
+        )
+
+        dist = np.sqrt(
+            (lon -
+             (lon1 + abx*t)
+            )**2 +
+            (
+                lat -
+                (lat1 + aby*t)
+            )**2
+        )
+
+        km_real = (
+            km1 +
+            (km2-km1)*t
+        )
+
+        if (
+            melhor_dist is None
+            or dist < melhor_dist
+        ):
+
+            melhor_dist = dist
+            melhor_km = km_real
+
+    return round(
+        melhor_km,
+        3
+    ) 
 )
 import sqlite3
 
@@ -651,12 +946,62 @@ if pagina == "Cadastrar Fotos":
             ] = resultado_editado
 
             if st.button(
-                "Recalcular KM"
-            ):
+    "Recalcular KM"
+):
 
-                st.warning(
-                    "Integração KM Real ainda será feita"
-                )
+    tabela = st.session_state[
+        "resultado_editado"
+    ].copy()
+
+    for idx, row in tabela.iterrows():
+
+        try:
+
+            lat = float(
+                row["Latitude"]
+            )
+
+            lon = float(
+                row["Longitude"]
+            )
+
+            rodovia = descobrir_rodovia(
+                lat,
+                lon
+            )
+
+            km_real = calcular_km_real(
+                rodovia,
+                lat,
+                lon
+            )
+
+            tabela.at[
+                idx,
+                "Rodovia"
+            ] = rodovia
+
+            tabela.at[
+                idx,
+                "KM Real"
+            ] = km_real
+
+        except:
+            pass
+
+    st.session_state[
+        "resultado_editado"
+    ] = tabela
+
+    st.success(
+        "KM recalculado."
+    )
+
+    st.data_editor(
+        tabela,
+        use_container_width=True,
+        key="editor_ocr_recalc"
+    )
 
             if st.button(
                 "Salvar Cadastro"
