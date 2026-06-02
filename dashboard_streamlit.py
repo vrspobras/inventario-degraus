@@ -91,15 +91,6 @@ if len(df):
         df["Degrau"],
         errors="coerce"
     )
-    df["KM Real"],
-    errors="coerce"
-)
-
-df["Degrau"] = pd.to_numeric(
-    df["Degrau"],
-    errors="coerce"
-)
-
 # =========================================
 # Sidebar
 # =========================================
