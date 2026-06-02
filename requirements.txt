@@ -4,3 +4,6 @@ plotly
 folium
 streamlit-folium
 openpyxl
+easyocr
+pillow
+numpy
