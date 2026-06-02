@@ -570,15 +570,15 @@ if pagina == "Cadastrar Fotos":
 
     if fotos:
 
-        if st.button("Processar Fotos"):
+    if st.button("Processar Fotos"):
 
-            dados = []
+        dados = []
 
-            barra = st.progress(0)
+        barra = st.progress(0)
 
-            total = len(fotos)
+        total = len(fotos)
 
-            for i, foto in enumerate(fotos):
+        for i, foto in enumerate(fotos):
 
                 try:
 
@@ -657,47 +657,47 @@ if pagina == "Cadastrar Fotos":
                 barra.progress(
                     (i + 1) / total
                 )
+  # AQUI DENTRO DO BOTÃO
 
-            resultado = pd.DataFrame(
-    dados
-)
+        resultado = pd.DataFrame(
+            dados
+        )
 
-resultado["KM Real"] = None
-resultado["Degrau"] = None
+        resultado["KM Real"] = None
+        resultado["Degrau"] = None
 
-st.success(
-    f"{len(resultado)} fotos processadas"
-)
+        st.success(
+            f"{len(resultado)} fotos processadas"
+        )
 
-resultado_editado = st.data_editor(
+        resultado_editado = st.data_editor(
 
-    resultado,
+            resultado,
 
-    use_container_width=True,
+            use_container_width=True,
 
-    num_rows="fixed",
+            num_rows="fixed",
 
-    key="editor_ocr"
+            key="editor_ocr"
 
-)
+        )
 
-st.session_state[
-    "resultado_editado"
-] = resultado_editado
+        st.session_state[
+            "resultado_editado"
+        ] = resultado_editado
 
+        if st.button(
+            "Recalcular KM"
+        ):
 
-if st.button(
-    "Recalcular KM"
-):
+            st.warning(
+                "Integração do KM Real será o próximo passo"
+            )
 
-    st.warning(
-        "Próxima etapa: integrar cálculo KM Real"
-    )
+        if st.button(
+            "Salvar Cadastro"
+        ):
 
-if st.button(
-    "Salvar Cadastro"
-):
-
-    st.warning(
-        "Próxima etapa: salvar SQLite"
-    )
+            st.warning(
+                "Integração SQLite será o próximo passo"
+            )
