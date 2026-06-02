@@ -265,21 +265,24 @@ if pagina == "Dashboard":
     with col_mapa:
         st.subheader("Mapa")
 
-        if len(dff):
-            lat_center = dff["Latitude"].mean()
-            lon_center = dff["Longitude"].mean()
+        dff_mapa = dff.dropna(subset=["Latitude", "Longitude"])
+
+        if len(dff_mapa):
+            lat_center = dff_mapa["Latitude"].mean()
+            lon_center = dff_mapa["Longitude"].mean()
 
             mapa = folium.Map(location=[lat_center, lon_center], zoom_start=11)
 
-            for _, row in dff.iterrows():
+            for _, row in dff_mapa.iterrows():
                 degrau = row["Degrau"]
                 cor = "green"
-                if degrau > 30:
-                    cor = "red"
-                elif degrau > 20:
-                    cor = "orange"
-                elif degrau > 10:
-                    cor = "yellow"
+                if pd.notna(degrau):
+                    if degrau > 30:
+                        cor = "red"
+                    elif degrau > 20:
+                        cor = "orange"
+                    elif degrau > 10:
+                        cor = "yellow"
 
                 popup = f"""
                 <b>Arquivo:</b> {row['Arquivo']}<br>
@@ -298,6 +301,8 @@ if pagina == "Dashboard":
                 ).add_to(mapa)
 
             st_folium(mapa, width=900, height=650)
+        else:
+            st.info("Nenhum ponto com coordenadas válidas para exibir no mapa.")
 
     # Gráfico Degrau x KM
     with col_graf:
@@ -468,122 +473,175 @@ elif pagina == "Cadastrar Fotos":
                 barra.progress((i + 1) / total)
 
             st.session_state["resultado_editado"] = pd.DataFrame(dados)
+            # Guardar as imagens originais para exibição na tabela
+            st.session_state["fotos_dict"] = {
+                f.name: f for f in fotos
+            }
             st.success(f"{len(dados)} fotos processadas")
 
-        # ─── Tabela editável (Lat, Lon, Degrau editáveis) ─────────────────────
+        # ─── Tabela editável + visualizador de foto ──────────────────────────
 
         if "resultado_editado" in st.session_state:
 
             tabela = st.session_state["resultado_editado"]
+            fotos_dict = st.session_state.get("fotos_dict", {})
 
-            st.markdown("**Edite Latitude, Longitude e Degrau conforme necessário:**")
+            nomes = tabela["Arquivo"].tolist()
 
-            tabela_editada = st.data_editor(
-                tabela,
-                use_container_width=True,
-                num_rows="fixed",
-                key="editor_principal",
-                column_config={
-                    "Latitude": st.column_config.NumberColumn(
-                        "Latitude",
-                        help="Latitude capturada pelo OCR (editável)",
-                        format="%.6f",
-                    ),
-                    "Longitude": st.column_config.NumberColumn(
-                        "Longitude",
-                        help="Longitude capturada pelo OCR (editável)",
-                        format="%.6f",
-                    ),
-                    "Degrau": st.column_config.NumberColumn(
-                        "Degrau (mm)",
-                        help="Altura do degrau em milímetros (editável)",
-                        min_value=0,
-                        format="%d mm",
-                    ),
-                    # colunas somente-leitura
-                    "Arquivo":   st.column_config.TextColumn(disabled=True),
-                    "Rodovia":   st.column_config.TextColumn(disabled=True),
-                    "Sentido":   st.column_config.TextColumn(disabled=True),
-                    "Data":      st.column_config.TextColumn(disabled=True),
-                    "KM Real":   st.column_config.NumberColumn(disabled=True, format="%.3f"),
-                    "OCR Bruto": st.column_config.TextColumn(disabled=True),
-                }
-            )
+            # Layout: tabela à esquerda, foto à direita
+            col_tabela, col_foto = st.columns([2, 1])
 
-            # Salvar edições de volta no session_state
-            st.session_state["resultado_editado"] = tabela_editada
+            with col_tabela:
+                st.markdown("**Edite Latitude, Longitude e Degrau conforme necessário:**")
 
-            # ─── Recalcular KM ────────────────────────────────────────────────
+                tabela_editada = st.data_editor(
+                    tabela,
+                    use_container_width=True,
+                    num_rows="fixed",
+                    key="editor_principal",
+                    column_config={
+                        "Latitude": st.column_config.NumberColumn(
+                            "Latitude",
+                            help="Latitude capturada pelo OCR (editável)",
+                            format="%.6f",
+                        ),
+                        "Longitude": st.column_config.NumberColumn(
+                            "Longitude",
+                            help="Longitude capturada pelo OCR (editável)",
+                            format="%.6f",
+                        ),
+                        "Degrau": st.column_config.NumberColumn(
+                            "Degrau (mm)",
+                            help="Altura do degrau em milímetros (editável)",
+                            min_value=0,
+                            format="%d mm",
+                        ),
+                        # colunas somente-leitura
+                        "Arquivo":   st.column_config.TextColumn(disabled=True),
+                        "Rodovia":   st.column_config.TextColumn(disabled=True),
+                        "Sentido":   st.column_config.TextColumn(disabled=True),
+                        "Data":      st.column_config.TextColumn(disabled=True),
+                        "KM Real":   st.column_config.NumberColumn(disabled=True, format="%.3f"),
+                        "OCR Bruto": st.column_config.TextColumn(disabled=True),
+                    }
+                )
 
-            if st.button("Recalcular KM"):
+                # Salvar edições de volta no session_state
+                st.session_state["resultado_editado"] = tabela_editada
 
-                tabela_calc = st.session_state["resultado_editado"].copy()
+            # ─── Painel de foto à direita ──────────────────────────────────────
+            with col_foto:
+                st.markdown("**📸 Visualizar foto**")
 
-                for idx, row in tabela_calc.iterrows():
+                foto_selecionada = st.selectbox(
+                    "Selecione a linha para ver a foto:",
+                    options=nomes,
+                    key="foto_sel"
+                )
+
+                idx_sel = nomes.index(foto_selecionada)
+                row_sel = st.session_state["resultado_editado"].iloc[idx_sel]
+
+                # Exibir metadados resumidos
+                st.markdown(
+                    f"**Rodovia:** {row_sel.get('Rodovia', '—')}  \n"
+                    f"**KM:** {row_sel.get('KM Real', '—')}  \n"
+                    f"**Sentido:** {row_sel.get('Sentido', '—')}  \n"
+                    f"**Degrau:** {row_sel.get('Degrau', '—')} mm  \n"
+                    f"**OCR:** {str(row_sel.get('OCR Bruto', ''))[:200]}"
+                )
+
+                if foto_selecionada in fotos_dict:
+                    arq = fotos_dict[foto_selecionada]
+                    arq.seek(0)
+                    img_full = Image.open(arq)
+
+                    # Foto completa
+                    st.image(img_full, caption="Foto completa", use_container_width=True)
+
+                    # Recorte da legenda (mesmo crop do OCR)
+                    legenda_crop = recortar_legenda(img_full)
+                    st.image(
+                        legenda_crop,
+                        caption="🔍 Recorte da legenda (OCR)",
+                        use_container_width=True
+                    )
+                else:
+                    st.info("Foto não disponível (recarregue e reprocesse as imagens).")
+
+            # ─── Botões de ação ────────────────────────────────────────────────
+
+            col_b1, col_b2 = st.columns(2)
+
+            with col_b1:
+                if st.button("🔄 Recalcular KM", use_container_width=True):
+
+                    tabela_calc = st.session_state["resultado_editado"].copy()
+
+                    for idx, row in tabela_calc.iterrows():
+                        try:
+                            lat = float(row["Latitude"])
+                            lon = float(row["Longitude"])
+                            rod = descobrir_rodovia(lat, lon)
+                            km_real = calcular_km_real(rod, lat, lon)
+                            tabela_calc.at[idx, "Rodovia"] = rod
+                            tabela_calc.at[idx, "KM Real"] = km_real
+                        except Exception:
+                            pass
+
+                    st.session_state["resultado_editado"] = tabela_calc
+                    st.success("KM recalculado com sucesso.")
+                    st.rerun()
+
+            with col_b2:
+                if st.button("💾 Salvar Cadastro", use_container_width=True):
+
+                    tabela_salvar = st.session_state["resultado_editado"].copy()
+
                     try:
-                        lat = float(row["Latitude"])
-                        lon = float(row["Longitude"])
-                        rod = descobrir_rodovia(lat, lon)
-                        km_real = calcular_km_real(rod, lat, lon)
-                        tabela_calc.at[idx, "Rodovia"] = rod
-                        tabela_calc.at[idx, "KM Real"] = km_real
-                    except Exception:
-                        pass
+                        con = sqlite3.connect("banco.db")
+                        cur = con.cursor()
 
-                st.session_state["resultado_editado"] = tabela_calc
-                st.success("KM recalculado com sucesso.")
-                st.rerun()
-
-            # ─── Salvar no banco ──────────────────────────────────────────────
-
-            if st.button("Salvar Cadastro"):
-
-                tabela_salvar = st.session_state["resultado_editado"].copy()
-
-                try:
-                    con = sqlite3.connect("banco.db")
-                    cur = con.cursor()
-
-                    cur.execute("""
-                        CREATE TABLE IF NOT EXISTS fotos (
-                            arquivo   TEXT,
-                            rodovia   TEXT,
-                            km_real   REAL,
-                            sentido   TEXT,
-                            latitude  REAL,
-                            longitude REAL,
-                            degrau    REAL,
-                            data      TEXT,
-                            ocr_bruto TEXT
-                        )
-                    """)
-
-                    for _, row in tabela_salvar.iterrows():
                         cur.execute("""
-                            INSERT INTO fotos
-                            (arquivo, rodovia, km_real, sentido,
-                             latitude, longitude, degrau, data, ocr_bruto)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        """, (
-                            row.get("Arquivo"),
-                            row.get("Rodovia"),
-                            row.get("KM Real"),
-                            row.get("Sentido"),
-                            row.get("Latitude"),
-                            row.get("Longitude"),
-                            row.get("Degrau"),
-                            row.get("Data"),
-                            row.get("OCR Bruto"),
-                        ))
+                            CREATE TABLE IF NOT EXISTS fotos (
+                                arquivo   TEXT,
+                                rodovia   TEXT,
+                                km_real   REAL,
+                                sentido   TEXT,
+                                latitude  REAL,
+                                longitude REAL,
+                                degrau    REAL,
+                                data      TEXT,
+                                ocr_bruto TEXT
+                            )
+                        """)
 
-                    con.commit()
-                    con.close()
+                        for _, row in tabela_salvar.iterrows():
+                            cur.execute("""
+                                INSERT INTO fotos
+                                (arquivo, rodovia, km_real, sentido,
+                                 latitude, longitude, degrau, data, ocr_bruto)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                row.get("Arquivo"),
+                                row.get("Rodovia"),
+                                row.get("KM Real"),
+                                row.get("Sentido"),
+                                row.get("Latitude"),
+                                row.get("Longitude"),
+                                row.get("Degrau"),
+                                row.get("Data"),
+                                row.get("OCR Bruto"),
+                            ))
 
-                    # Limpar cache para o dashboard atualizar
-                    carregar_dados.clear()
+                        con.commit()
+                        con.close()
 
-                    st.success(f"{len(tabela_salvar)} registros salvos no banco.")
-                    st.session_state.pop("resultado_editado", None)
+                        carregar_dados.clear()
 
-                except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
+                        st.success(f"{len(tabela_salvar)} registros salvos no banco.")
+                        st.session_state.pop("resultado_editado", None)
+                        st.session_state.pop("fotos_dict", None)
+
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
