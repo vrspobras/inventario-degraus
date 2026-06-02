@@ -406,6 +406,12 @@ st.dataframe(
 
 if pagina == "Cadastrar Fotos":
 
+    import re
+    import numpy as np
+    import pandas as pd
+    from PIL import Image
+    import easyocr
+
     st.title(
         "📷 Cadastrar Fotos"
     )
@@ -424,19 +430,243 @@ if pagina == "Cadastrar Fotos":
 
     )
 
-    if fotos:
+    # =====================================
+    # OCR
+    # =====================================
 
-        st.success(
-            f"{len(fotos)} fotos carregadas"
+    @st.cache_resource
+    def carregar_ocr():
+
+        return easyocr.Reader(
+            ['en'],
+            gpu=False
         )
 
-        st.dataframe(
-            pd.DataFrame(
-                {
-                    "Arquivo":[
-                        f.name
-                        for f in fotos
-                    ]
-                }
+    reader = carregar_ocr()
+
+    # =====================================
+    # Funções
+    # =====================================
+
+    def recortar_legenda(img):
+
+        largura, altura = img.size
+
+        x1 = int(largura * 0.60)
+        y1 = int(altura * 0.65)
+
+        return img.crop(
+            (
+                x1,
+                y1,
+                largura,
+                altura
             )
         )
+
+    def extrair_rodovia(texto):
+
+        m = re.search(
+            r'SP\s*-?\s*(\d+)',
+            texto,
+            re.I
+        )
+
+        if m:
+            return f"SP-{m.group(1)}"
+
+        return None
+
+    def extrair_sentido(texto):
+
+        texto = texto.upper()
+
+        if re.search(r'\bPS\b', texto):
+            return "Sul"
+
+        if re.search(r'\bPN\b', texto):
+            return "Norte"
+
+        if re.search(r'\bPL\b', texto):
+            return "Leste"
+
+        if re.search(r'\bPO\b', texto):
+            return "Oeste"
+
+        return None
+
+    def extrair_data(texto):
+
+        m = re.search(
+            r'(\d{2}/\d{2}/\d{4})',
+            texto
+        )
+
+        if m:
+            return m.group(1)
+
+        return None
+
+    def extrair_coordenadas(texto):
+
+        texto = texto.replace(",", ".")
+
+        numeros = re.findall(
+            r'-?\d*\.\d{5,}',
+            texto
+        )
+
+        lat = None
+        lon = None
+
+        for n in numeros:
+
+            try:
+
+                valor = float(n)
+
+                if (
+                    lon is None and
+                    40 <= abs(valor) <= 80
+                ):
+
+                    lon = -abs(valor)
+
+                    continue
+
+                if (
+                    lat is None and
+                    18 <= abs(valor) <= 35
+                ):
+
+                    lat = -abs(valor)
+
+                    continue
+
+                if (
+                    lat is None and
+                    1 <= abs(valor) <= 5
+                ):
+
+                    lat = -(20 + abs(valor))
+
+                    continue
+
+                if (
+                    lat is None and
+                    0 < abs(valor) < 1
+                ):
+
+                    lat = -(22 + abs(valor))
+
+            except:
+                pass
+
+        return lat, lon
+
+    # =====================================
+    # PROCESSAR
+    # =====================================
+
+    if fotos:
+
+        if st.button("Processar Fotos"):
+
+            dados = []
+
+            barra = st.progress(0)
+
+            total = len(fotos)
+
+            for i, foto in enumerate(fotos):
+
+                try:
+
+                    img = Image.open(
+                        foto
+                    )
+
+                    legenda = recortar_legenda(
+                        img
+                    )
+
+                    texto_lido = reader.readtext(
+                        np.array(legenda),
+                        detail=0,
+                        paragraph=False
+                    )
+
+                    texto = "\n".join(
+                        texto_lido
+                    )
+
+                    rodovia = extrair_rodovia(
+                        texto
+                    )
+
+                    sentido = extrair_sentido(
+                        texto
+                    )
+
+                    data = extrair_data(
+                        texto
+                    )
+
+                    lat, lon = extrair_coordenadas(
+                        texto
+                    )
+
+                    dados.append({
+
+                        "Arquivo": foto.name,
+
+                        "Rodovia": rodovia,
+
+                        "Sentido": sentido,
+
+                        "Latitude": lat,
+
+                        "Longitude": lon,
+
+                        "Data": data,
+
+                        "OCR Bruto": texto
+
+                    })
+
+                except Exception as e:
+
+                    dados.append({
+
+                        "Arquivo": foto.name,
+
+                        "Rodovia": None,
+
+                        "Sentido": None,
+
+                        "Latitude": None,
+
+                        "Longitude": None,
+
+                        "Data": None,
+
+                        "OCR Bruto": str(e)
+
+                    })
+
+                barra.progress(
+                    (i + 1) / total
+                )
+
+            resultado = pd.DataFrame(
+                dados
+            )
+
+            st.success(
+                f"{len(resultado)} fotos processadas"
+            )
+
+            st.dataframe(
+                resultado,
+                use_container_width=True
+            )
