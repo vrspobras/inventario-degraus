@@ -26,6 +26,7 @@ pagina = st.sidebar.radio(
         "Dashboard",
         "Cadastrar Fotos"
     ]
+)
 
 # =========================================
 # KMZ
@@ -169,7 +170,7 @@ def carregar_kmz():
                     registro
                 )
 
-                todos_os_marcos.append({
+                _marcos.append({
 
                     "rodovia": rodovia,
 
@@ -202,12 +203,13 @@ def carregar_kmz():
         )
 
     return (
-        todos_os_marcos,
+        _marcos,
         rodovias
     )
 
 TODOS_OS_MARCOS, RODOVIAS = carregar_kmz()
-   def distancia(
+
+def distancia(
     lat1,
     lon1,
     lat2,
@@ -315,10 +317,10 @@ def calcular_km_real(
             melhor_km = km_real
 
     return round(
-        melhor_km,
-        3
-    ) 
+    melhor_km,
+    3
 )
+
 import sqlite3
 
 @st.cache_data
@@ -945,63 +947,63 @@ if pagina == "Cadastrar Fotos":
                 "resultado_editado"
             ] = resultado_editado
 
-            if st.button(
-    "Recalcular KM"
-):
+                        if st.button(
+                "Recalcular KM"
+            ):
 
-    tabela = st.session_state[
-        "resultado_editado"
-    ].copy()
+                tabela = st.session_state[
+                    "resultado_editado"
+                ].copy()
 
-    for idx, row in tabela.iterrows():
+                for idx, row in tabela.iterrows():
 
-        try:
+                    try:
 
-            lat = float(
-                row["Latitude"]
-            )
+                        lat = float(
+                            row["Latitude"]
+                        )
 
-            lon = float(
-                row["Longitude"]
-            )
+                        lon = float(
+                            row["Longitude"]
+                        )
 
-            rodovia = descobrir_rodovia(
-                lat,
-                lon
-            )
+                        rodovia = descobrir_rodovia(
+                            lat,
+                            lon
+                        )
 
-            km_real = calcular_km_real(
-                rodovia,
-                lat,
-                lon
-            )
+                        km_real = calcular_km_real(
+                            rodovia,
+                            lat,
+                            lon
+                        )
 
-            tabela.at[
-                idx,
-                "Rodovia"
-            ] = rodovia
+                        tabela.at[
+                            idx,
+                            "Rodovia"
+                        ] = rodovia
 
-            tabela.at[
-                idx,
-                "KM Real"
-            ] = km_real
+                        tabela.at[
+                            idx,
+                            "KM Real"
+                        ] = km_real
 
-        except:
-            pass
+                    except:
+                        pass
 
-    st.session_state[
-        "resultado_editado"
-    ] = tabela
+                st.session_state[
+                    "resultado_editado"
+                ] = tabela
 
-    st.success(
-        "KM recalculado."
-    )
+                st.success(
+                    "KM recalculado."
+                )
 
-    st.data_editor(
-        tabela,
-        use_container_width=True,
-        key="editor_ocr_recalc"
-    )
+                st.data_editor(
+                    tabela,
+                    use_container_width=True,
+                    key="editor_ocr_recalc"
+                )
 
             if st.button(
                 "Salvar Cadastro"
