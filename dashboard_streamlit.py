@@ -367,22 +367,13 @@ elif pagina == "Pontos Cadastrados":
     if len(df_banco) == 0:
         st.info("Nenhum ponto cadastrado ainda. Use a página 'Cadastrar Fotos' para adicionar.")
     else:
-        df_banco["KM Real"]    = pd.to_numeric(df_banco["KM Real"], errors="coerce")
+        df_banco["KM Real"]     = pd.to_numeric(df_banco["KM Real"], errors="coerce")
         df_banco["Degrau (mm)"] = pd.to_numeric(df_banco["Degrau (mm)"], errors="coerce")
 
         # ── Filtros rápidos inline ────────────────────────────────────────────
         fa, fb, fc, fd = st.columns(4)
-
-        f_rod = fa.multiselect(
-            "Rodovia",
-            sorted(df_banco["Rodovia"].dropna().unique()),
-            key="f_rod_pts"
-        )
-        f_sent = fb.multiselect(
-            "Sentido",
-            sorted(df_banco["Sentido"].dropna().unique()),
-            key="f_sent_pts"
-        )
+        f_rod  = fa.multiselect("Rodovia",  sorted(df_banco["Rodovia"].dropna().unique()),  key="f_rod_pts")
+        f_sent = fb.multiselect("Sentido",  sorted(df_banco["Sentido"].dropna().unique()),  key="f_sent_pts")
         f_dmin = fc.number_input("Degrau mín (mm)", value=0.0, key="f_dmin")
         f_dmax = fd.number_input(
             "Degrau máx (mm)",
@@ -398,47 +389,137 @@ elif pagina == "Pontos Cadastrados":
         df_pts = df_pts[
             (df_pts["Degrau (mm)"].isna()) |
             ((df_pts["Degrau (mm)"] >= f_dmin) & (df_pts["Degrau (mm)"] <= f_dmax))
-        ]
+        ].reset_index(drop=True)
 
         # ── Métricas rápidas ──────────────────────────────────────────────────
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Total de pontos", len(df_pts))
-        m2.metric(
-            "Degrau médio",
-            f"{df_pts['Degrau (mm)'].mean():.1f} mm" if df_pts["Degrau (mm)"].notna().any() else "—"
-        )
-        m3.metric(
-            "Degrau máximo",
-            f"{df_pts['Degrau (mm)'].max():.1f} mm" if df_pts["Degrau (mm)"].notna().any() else "—"
-        )
+        m2.metric("Degrau médio",   f"{df_pts['Degrau (mm)'].mean():.1f} mm" if df_pts["Degrau (mm)"].notna().any() else "—")
+        m3.metric("Degrau máximo",  f"{df_pts['Degrau (mm)'].max():.1f} mm"  if df_pts["Degrau (mm)"].notna().any() else "—")
         m4.metric("Críticos (>30mm)", int((df_pts["Degrau (mm)"] > 30).sum()))
 
-        # ── Tabela completa ───────────────────────────────────────────────────
         st.markdown("---")
 
+        # Inicializar estado de edição para esta página
+        if "pts_linha" not in st.session_state:
+            st.session_state["pts_linha"] = 0
+        if "pts_df" not in st.session_state:
+            st.session_state["pts_df"] = df_pts.copy()
+
+        # Sincronizar se filtros mudaram (shape diferente)
+        if len(st.session_state["pts_df"]) != len(df_pts):
+            st.session_state["pts_df"] = df_pts.copy()
+            st.session_state["pts_linha"] = 0
+
+        pts_df   = st.session_state["pts_df"]
         colunas_exibir = ["Arquivo", "Rodovia", "KM Real", "Sentido",
                           "Degrau (mm)", "Latitude", "Longitude", "Data"]
 
-        st.dataframe(
-            df_pts[colunas_exibir].sort_values(["Rodovia", "KM Real"]),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "KM Real":     st.column_config.NumberColumn(format="%.3f"),
-                "Degrau (mm)": st.column_config.NumberColumn(format="%.1f mm"),
-                "Latitude":    st.column_config.NumberColumn(format="%.6f"),
-                "Longitude":   st.column_config.NumberColumn(format="%.6f"),
-            }
-        )
+        col_tab, col_img = st.columns([2, 1])
+
+        with col_tab:
+            st.markdown("**Clique em uma linha para ver a foto e editar:**")
+
+            ev = st.dataframe(
+                pts_df[colunas_exibir].sort_values(["Rodovia", "KM Real"]),
+                use_container_width=True,
+                hide_index=False,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="pts_tabela_sel",
+                column_config={
+                    "KM Real":     st.column_config.NumberColumn(format="%.3f"),
+                    "Degrau (mm)": st.column_config.NumberColumn(format="%.1f mm"),
+                    "Latitude":    st.column_config.NumberColumn(format="%.6f"),
+                    "Longitude":   st.column_config.NumberColumn(format="%.6f"),
+                }
+            )
+
+            sel = ev.selection.rows if ev.selection.rows else []
+            if sel:
+                st.session_state["pts_linha"] = sel[0]
+
+            idx_ativo = min(st.session_state["pts_linha"], len(pts_df) - 1)
+            row_ativo = pts_df.iloc[idx_ativo]
+
+            # ── Edição da linha selecionada ───────────────────────────────────
+            st.markdown(f"---")
+            st.markdown(f"**✏️ Editando — {row_ativo['Arquivo']}**")
+
+            ea, eb, ec = st.columns(3)
+            novo_lat    = ea.number_input("Latitude",    value=float(row_ativo["Latitude"])    if pd.notna(row_ativo["Latitude"])    else 0.0, format="%.6f", key="pts_lat")
+            novo_lon    = eb.number_input("Longitude",   value=float(row_ativo["Longitude"])   if pd.notna(row_ativo["Longitude"])   else 0.0, format="%.6f", key="pts_lon")
+            novo_degrau = ec.number_input("Degrau (mm)", value=float(row_ativo["Degrau (mm)"]) if pd.notna(row_ativo["Degrau (mm)"]) else 0.0, min_value=0.0, step=1.0, key="pts_deg")
+
+            bb1, bb2 = st.columns(2)
+
+            if bb1.button("✅ Aplicar edição", use_container_width=True, key="pts_aplicar"):
+                pts_df.at[idx_ativo, "Latitude"]    = novo_lat
+                pts_df.at[idx_ativo, "Longitude"]   = novo_lon
+                pts_df.at[idx_ativo, "Degrau (mm)"] = novo_degrau
+                st.session_state["pts_df"] = pts_df
+                st.success("Linha atualizada na tabela.")
+                st.rerun()
+
+            if bb2.button("💾 Salvar alterações no banco", use_container_width=True, key="pts_salvar"):
+                try:
+                    con = sqlite3.connect("banco.db")
+                    for _, r in pts_df.iterrows():
+                        con.execute("""
+                            UPDATE fotos
+                               SET latitude  = ?,
+                                   longitude = ?,
+                                   degrau    = ?
+                             WHERE arquivo   = ?
+                        """, (r["Latitude"], r["Longitude"], r["Degrau (mm)"], r["Arquivo"]))
+                    con.commit()
+                    con.close()
+                    carregar_dados.clear()
+                    st.success("Alterações salvas no banco!")
+                    st.session_state.pop("pts_df", None)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        with col_img:
+            st.markdown("**📸 Foto selecionada**")
+
+            idx_foto  = min(st.session_state["pts_linha"], len(pts_df) - 1)
+            row_foto  = pts_df.iloc[idx_foto]
+            nome_foto = row_foto["Arquivo"]
+
+            st.caption(f"**{nome_foto}**")
+            st.markdown(
+                f"**Rodovia:** {row_foto.get('Rodovia', '—')}  \n"
+                f"**KM:** {row_foto.get('KM Real', '—')}  \n"
+                f"**Sentido:** {row_foto.get('Sentido', '—')}  \n"
+                f"**Degrau:** {row_foto.get('Degrau (mm)', '—')} mm"
+            )
+
+            # Tentar carregar do banco (buscar arquivo salvo em disco se existir)
+            import os
+            pastas_fotos = ["fotos", "uploads", "."]
+            img_encontrada = None
+            for pasta in pastas_fotos:
+                caminho = os.path.join(pasta, nome_foto)
+                if os.path.exists(caminho):
+                    img_encontrada = caminho
+                    break
+
+            if img_encontrada:
+                from PIL import Image as PILImage
+                img_full = PILImage.open(img_encontrada)
+                st.image(img_full, caption="Foto completa", use_container_width=True)
+                # Recorte da legenda
+                largura, altura = img_full.size
+                legenda_crop = img_full.crop((int(largura*0.45), int(altura*0.58), largura, altura))
+                st.image(legenda_crop, caption="🔍 Recorte legenda", use_container_width=True)
+            else:
+                st.info("Foto não encontrada em disco.  \nSalve as fotos na pasta `fotos/` do projeto para exibi-las aqui.")
 
         # ── Exportar CSV ──────────────────────────────────────────────────────
-        csv = df_pts[colunas_exibir].to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="⬇️ Exportar CSV",
-            data=csv,
-            file_name="pontos_cadastrados.csv",
-            mime="text/csv",
-        )
+        csv = pts_df[colunas_exibir].to_csv(index=False).encode("utf-8")
+        st.download_button("⬇️ Exportar CSV", csv, "pontos_cadastrados.csv", "text/csv")
 
 elif pagina == "Cadastrar Fotos":
 
@@ -463,8 +544,10 @@ elif pagina == "Cadastrar Fotos":
 
     def recortar_legenda(img):
         largura, altura = img.size
-        x1 = int(largura * 0.60)
-        y1 = int(altura * 0.65)
+        # Crop mais amplo: 45% da largura e 58% da altura
+        # para capturar coordenadas longas no canto inferior direito
+        x1 = int(largura * 0.45)
+        y1 = int(altura * 0.58)
         return img.crop((x1, y1, largura, altura))
 
     def extrair_rodovia(texto):
@@ -493,24 +576,31 @@ elif pagina == "Cadastrar Fotos":
 
     def extrair_coordenadas(texto):
         texto = texto.replace(",", ".")
-        numeros = re.findall(r'-?\d*\.\d{5,}', texto)
+
+        # Tentar padrão explícito  XX.XXXXXXS  YY.XXXXXXW  (colado ou separado)
+        m = re.search(
+            r'(\d{1,3}\.\d{4,})\s*S[^0-9]*(\d{1,3}\.\d{4,})\s*W',
+            texto, re.I
+        )
+        if m:
+            return -abs(float(m.group(1))), -abs(float(m.group(2)))
+
+        # Fallback: pegar todos os números com 5+ casas decimais
+        numeros = re.findall(r'-?\d+\.\d{5,}', texto)
         lat = None
         lon = None
 
         for n in numeros:
             try:
                 valor = float(n)
-                if lon is None and 40 <= abs(valor) <= 80:
+                # Longitude Brasil: 34 a 74 W
+                if lon is None and 34 <= abs(valor) <= 74:
                     lon = -abs(valor)
                     continue
-                if lat is None and 18 <= abs(valor) <= 35:
+                # Latitude Brasil: 5 a 34 S
+                if lat is None and 5 <= abs(valor) <= 34:
                     lat = -abs(valor)
                     continue
-                if lat is None and 1 <= abs(valor) <= 5:
-                    lat = -(20 + abs(valor))
-                    continue
-                if lat is None and 0 < abs(valor) < 1:
-                    lat = -(22 + abs(valor))
             except Exception:
                 pass
 
