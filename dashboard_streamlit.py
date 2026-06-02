@@ -23,6 +23,7 @@ pagina = st.sidebar.radio(
     "Menu",
     [
         "Dashboard",
+        "Pontos Cadastrados",
         "Cadastrar Fotos"
     ]
 )
@@ -346,6 +347,99 @@ if pagina == "Dashboard":
 # CADASTRO
 # =========================================
 
+elif pagina == "Pontos Cadastrados":
+
+    st.title("📋 Pontos Cadastrados")
+
+    # Recarregar dados frescos do banco
+    df_banco = carregar_dados().rename(columns={
+        "arquivo": "Arquivo",
+        "rodovia": "Rodovia",
+        "km_real": "KM Real",
+        "sentido": "Sentido",
+        "latitude": "Latitude",
+        "longitude": "Longitude",
+        "degrau": "Degrau (mm)",
+        "data": "Data",
+        "ocr_bruto": "OCR Bruto",
+    })
+
+    if len(df_banco) == 0:
+        st.info("Nenhum ponto cadastrado ainda. Use a página 'Cadastrar Fotos' para adicionar.")
+    else:
+        df_banco["KM Real"]    = pd.to_numeric(df_banco["KM Real"], errors="coerce")
+        df_banco["Degrau (mm)"] = pd.to_numeric(df_banco["Degrau (mm)"], errors="coerce")
+
+        # ── Filtros rápidos inline ────────────────────────────────────────────
+        fa, fb, fc, fd = st.columns(4)
+
+        f_rod = fa.multiselect(
+            "Rodovia",
+            sorted(df_banco["Rodovia"].dropna().unique()),
+            key="f_rod_pts"
+        )
+        f_sent = fb.multiselect(
+            "Sentido",
+            sorted(df_banco["Sentido"].dropna().unique()),
+            key="f_sent_pts"
+        )
+        f_dmin = fc.number_input("Degrau mín (mm)", value=0.0, key="f_dmin")
+        f_dmax = fd.number_input(
+            "Degrau máx (mm)",
+            value=float(df_banco["Degrau (mm)"].max()) if df_banco["Degrau (mm)"].notna().any() else 0.0,
+            key="f_dmax"
+        )
+
+        df_pts = df_banco.copy()
+        if f_rod:
+            df_pts = df_pts[df_pts["Rodovia"].isin(f_rod)]
+        if f_sent:
+            df_pts = df_pts[df_pts["Sentido"].isin(f_sent)]
+        df_pts = df_pts[
+            (df_pts["Degrau (mm)"].isna()) |
+            ((df_pts["Degrau (mm)"] >= f_dmin) & (df_pts["Degrau (mm)"] <= f_dmax))
+        ]
+
+        # ── Métricas rápidas ──────────────────────────────────────────────────
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total de pontos", len(df_pts))
+        m2.metric(
+            "Degrau médio",
+            f"{df_pts['Degrau (mm)'].mean():.1f} mm" if df_pts["Degrau (mm)"].notna().any() else "—"
+        )
+        m3.metric(
+            "Degrau máximo",
+            f"{df_pts['Degrau (mm)'].max():.1f} mm" if df_pts["Degrau (mm)"].notna().any() else "—"
+        )
+        m4.metric("Críticos (>30mm)", int((df_pts["Degrau (mm)"] > 30).sum()))
+
+        # ── Tabela completa ───────────────────────────────────────────────────
+        st.markdown("---")
+
+        colunas_exibir = ["Arquivo", "Rodovia", "KM Real", "Sentido",
+                          "Degrau (mm)", "Latitude", "Longitude", "Data"]
+
+        st.dataframe(
+            df_pts[colunas_exibir].sort_values(["Rodovia", "KM Real"]),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "KM Real":     st.column_config.NumberColumn(format="%.3f"),
+                "Degrau (mm)": st.column_config.NumberColumn(format="%.1f mm"),
+                "Latitude":    st.column_config.NumberColumn(format="%.6f"),
+                "Longitude":   st.column_config.NumberColumn(format="%.6f"),
+            }
+        )
+
+        # ── Exportar CSV ──────────────────────────────────────────────────────
+        csv = df_pts[colunas_exibir].to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="⬇️ Exportar CSV",
+            data=csv,
+            file_name="pontos_cadastrados.csv",
+            mime="text/csv",
+        )
+
 elif pagina == "Cadastrar Fotos":
 
     from PIL import Image
@@ -485,74 +579,90 @@ elif pagina == "Cadastrar Fotos":
 
             tabela = st.session_state["resultado_editado"]
             fotos_dict = st.session_state.get("fotos_dict", {})
-
             nomes = tabela["Arquivo"].tolist()
+
+            # Inicializar índice selecionado
+            if "linha_selecionada" not in st.session_state:
+                st.session_state["linha_selecionada"] = 0
 
             # Layout: tabela à esquerda, foto à direita
             col_tabela, col_foto = st.columns([2, 1])
 
             with col_tabela:
-                st.markdown("**Edite Latitude, Longitude e Degrau conforme necessário:**")
+                st.markdown("**Clique em uma linha para ver a foto. Edite Lat, Lon e Degrau diretamente:**")
 
-                tabela_editada = st.data_editor(
-                    tabela,
+                # Tabela clicável para selecionar linha (dispara rerun automático)
+                evento = st.dataframe(
+                    tabela[["Arquivo", "Rodovia", "Sentido", "KM Real",
+                             "Latitude", "Longitude", "Degrau", "Data"]],
                     use_container_width=True,
-                    num_rows="fixed",
-                    key="editor_principal",
-                    column_config={
-                        "Latitude": st.column_config.NumberColumn(
-                            "Latitude",
-                            help="Latitude capturada pelo OCR (editável)",
-                            format="%.6f",
-                        ),
-                        "Longitude": st.column_config.NumberColumn(
-                            "Longitude",
-                            help="Longitude capturada pelo OCR (editável)",
-                            format="%.6f",
-                        ),
-                        "Degrau": st.column_config.NumberColumn(
-                            "Degrau (mm)",
-                            help="Altura do degrau em milímetros (editável)",
-                            min_value=0,
-                            format="%d mm",
-                        ),
-                        # colunas somente-leitura
-                        "Arquivo":   st.column_config.TextColumn(disabled=True),
-                        "Rodovia":   st.column_config.TextColumn(disabled=True),
-                        "Sentido":   st.column_config.TextColumn(disabled=True),
-                        "Data":      st.column_config.TextColumn(disabled=True),
-                        "KM Real":   st.column_config.NumberColumn(disabled=True, format="%.3f"),
-                        "OCR Bruto": st.column_config.TextColumn(disabled=True),
-                    }
+                    hide_index=False,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="tabela_sel",
                 )
 
-                # Salvar edições de volta no session_state
-                st.session_state["resultado_editado"] = tabela_editada
+                # Capturar linha clicada
+                sel_rows = evento.selection.rows if evento.selection.rows else []
+                if sel_rows:
+                    st.session_state["linha_selecionada"] = sel_rows[0]
+
+                idx_ativo = st.session_state["linha_selecionada"]
+                row_ativo = tabela.iloc[idx_ativo]
+
+                # ── Painel de edição da linha selecionada ──────────────────────
+                st.markdown(f"---")
+                st.markdown(f"**✏️ Editando linha {idx_ativo} — {row_ativo['Arquivo']}**")
+
+                ed1, ed2, ed3 = st.columns(3)
+
+                novo_lat = ed1.number_input(
+                    "Latitude",
+                    value=float(row_ativo["Latitude"]) if pd.notna(row_ativo["Latitude"]) else 0.0,
+                    format="%.6f",
+                    key=f"lat_{idx_ativo}"
+                )
+                novo_lon = ed2.number_input(
+                    "Longitude",
+                    value=float(row_ativo["Longitude"]) if pd.notna(row_ativo["Longitude"]) else 0.0,
+                    format="%.6f",
+                    key=f"lon_{idx_ativo}"
+                )
+                novo_degrau = ed3.number_input(
+                    "Degrau (mm)",
+                    value=float(row_ativo["Degrau"]) if pd.notna(row_ativo["Degrau"]) else 0.0,
+                    min_value=0.0,
+                    step=1.0,
+                    key=f"deg_{idx_ativo}"
+                )
+
+                if st.button("✅ Aplicar edição na linha", key="aplicar_edicao"):
+                    tabela.at[idx_ativo, "Latitude"]  = novo_lat
+                    tabela.at[idx_ativo, "Longitude"] = novo_lon
+                    tabela.at[idx_ativo, "Degrau"]    = novo_degrau
+                    st.session_state["resultado_editado"] = tabela
+                    st.success(f"Linha {idx_ativo} atualizada.")
+                    st.rerun()
 
             # ─── Painel de foto à direita ──────────────────────────────────────
             with col_foto:
-                st.markdown("**📸 Visualizar foto**")
+                st.markdown("**📸 Foto selecionada**")
 
-                foto_selecionada = st.selectbox(
-                    "Selecione a linha para ver a foto:",
-                    options=nomes,
-                    key="foto_sel"
-                )
+                # Sincroniza com a linha clicada na tabela
+                idx_foto = st.session_state["linha_selecionada"]
+                row_foto = st.session_state["resultado_editado"].iloc[idx_foto]
+                nome_foto = row_foto["Arquivo"]
 
-                idx_sel = nomes.index(foto_selecionada)
-                row_sel = st.session_state["resultado_editado"].iloc[idx_sel]
-
-                # Exibir metadados resumidos
+                st.caption(f"**{nome_foto}**")
                 st.markdown(
-                    f"**Rodovia:** {row_sel.get('Rodovia', '—')}  \n"
-                    f"**KM:** {row_sel.get('KM Real', '—')}  \n"
-                    f"**Sentido:** {row_sel.get('Sentido', '—')}  \n"
-                    f"**Degrau:** {row_sel.get('Degrau', '—')} mm  \n"
-                    f"**OCR:** {str(row_sel.get('OCR Bruto', ''))[:200]}"
+                    f"**Rodovia:** {row_foto.get('Rodovia', '—')}  \n"
+                    f"**KM:** {row_foto.get('KM Real', '—')}  \n"
+                    f"**Sentido:** {row_foto.get('Sentido', '—')}  \n"
+                    f"**Degrau:** {row_foto.get('Degrau', '—')} mm"
                 )
 
-                if foto_selecionada in fotos_dict:
-                    arq = fotos_dict[foto_selecionada]
+                if nome_foto in fotos_dict:
+                    arq = fotos_dict[nome_foto]
                     arq.seek(0)
                     img_full = Image.open(arq)
 
