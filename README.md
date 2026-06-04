@@ -26,5 +26,5 @@ license: mit
 ├── README.md
 ├── .gitignore
 ├── kmz_rodovias.kmz
-└── logo-viaraposo-2.png
+
 ```
