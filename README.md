@@ -1,5 +1,5 @@
 ---
-title: Inventário de Degraus Via Raposo
+title: Inventário de Degraus
 emoji: 🛣️
 colorFrom: blue
 colorTo: yellow
@@ -8,9 +8,8 @@ pinned: true
 license: mit
 ---
 
-# 🛣️ Inventário de Degraus — Via Raposo
+# 🛣️ Inventário de Degraus 
 
-Sistema de inventário e monitoramento de degraus no pavimento, desenvolvido para a **Via Raposo Concessões**.
 
 ## Funcionalidades
 
