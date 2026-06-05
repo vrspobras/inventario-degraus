@@ -14,7 +14,7 @@ import sqlite3
 from streamlit_folium import st_folium
 
 # ═══════════════════════════════════════════════════════════════════
-# IDENTIDADE VISUAL — Via Raposo
+# IDENTIDADE VISUAL
 # ═══════════════════════════════════════════════════════════════════
 AZUL      = "#1B3A8C"
 AZUL_DARK = "#122970"
