@@ -1,6 +1,9 @@
+import os
+import base64
 import pandas as pd
 import streamlit as st
 import plotly.express as px
+import plotly.graph_objects as go
 import folium
 import zipfile
 import xml.etree.ElementTree as ET
@@ -10,31 +13,364 @@ import sqlite3
 
 from streamlit_folium import st_folium
 
-# =========================================
-# Página
-# =========================================
 
+# ═══════════════════════════════════════════════════════════════════
+# USUÁRIOS — edite aqui para adicionar/remover acessos
+# senha fica em hash SHA256 para não ficar em texto puro
+# ═══════════════════════════════════════════════════════════════════
+import hashlib
+
+def _hash(senha):
+    return hashlib.sha256(senha.encode()).hexdigest()
+
+USUARIOS = {
+    "admin": {
+        "senha": _hash("viaraposo2024"),
+        "nome":  "Administrador",
+        "perfil": "admin"   # admin vê tudo
+    },
+    "operador": {
+        "senha": _hash("obras2024"),
+        "nome":  "Operador de Campo",
+        "perfil": "operador"  # operador só cadastra e vê pontos
+    },
+}
+
+CSS_LOGIN = f"""
+<style>
+.login-wrapper {{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 85vh;
+}}
+.login-card {{
+    background: {BRANCO};
+    border-radius: 16px;
+    box-shadow: 0 8px 40px rgba(27,58,140,0.18);
+    padding: 48px 52px 40px 52px;
+    width: 100%;
+    max-width: 420px;
+    border-top: 6px solid {OURO};
+}}
+.login-logo {{
+    text-align: center;
+    margin-bottom: 28px;
+}}
+.login-logo h2 {{
+    color: {AZUL};
+    font-size: 1.5rem;
+    font-weight: 800;
+    margin: 12px 0 4px 0;
+    letter-spacing: 0.5px;
+}}
+.login-logo p {{
+    color: #8a94b2;
+    font-size: 0.82rem;
+    margin: 0;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}}
+.login-footer {{
+    text-align: center;
+    color: #b0b8d0;
+    font-size: 0.72rem;
+    margin-top: 28px;
+}}
+</style>
+"""
+
+def tela_login():
+    st.markdown(CSS_LOGIN, unsafe_allow_html=True)
+    # esconder sidebar na tela de login
+    st.markdown("<style>[data-testid='stSidebar']{display:none}</style>", unsafe_allow_html=True)
+
+    col_l, col_c, col_r = st.columns([1, 1.4, 1])
+    with col_c:
+        st.markdown('''<div class="login-card">''', unsafe_allow_html=True)
+
+        # Logo / cabeçalho
+        logo_path = "logo-viaraposo-2.png"
+        if os.path.exists(logo_path):
+            with open(logo_path, "rb") as f:
+                logo_b64 = base64.b64encode(f.read()).decode()
+            st.markdown(
+                f'''<div class="login-logo">
+                    <img src="data:image/png;base64,{logo_b64}" style="width:140px;">
+                    <p>Inventário de Degraus</p>
+                </div>''',
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f'''<div class="login-logo">
+                    <span style="font-size:3rem;">🛣️</span>
+                    <h2>Via Raposo</h2>
+                    <p>Inventário de Degraus</p>
+                </div>''',
+                unsafe_allow_html=True
+            )
+
+        usuario = st.text_input("Usuário", placeholder="Digite seu usuário", key="login_user")
+        senha   = st.text_input("Senha",   placeholder="Digite sua senha",   key="login_pass", type="password")
+
+        if st.button("Entrar →", use_container_width=True, key="login_btn"):
+            if usuario in USUARIOS and USUARIOS[usuario]["senha"] == _hash(senha):
+                st.session_state["logado"]  = True
+                st.session_state["usuario"] = usuario
+                st.session_state["nome"]    = USUARIOS[usuario]["nome"]
+                st.session_state["perfil"]  = USUARIOS[usuario]["perfil"]
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos.")
+
+        st.markdown(
+            '<div class="login-footer">© Via Raposo Concessões · Acesso restrito</div>',
+            unsafe_allow_html=True
+        )
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════
+# CONTROLE DE SESSÃO
+# ═══════════════════════════════════════════════════════════════════
+if "logado" not in st.session_state:
+    st.session_state["logado"] = False
+
+if not st.session_state["logado"]:
+    tela_login()
+    st.stop()
+
+
+# ═══════════════════════════════════════════════════════════════════
+# IDENTIDADE VISUAL — Via Raposo
+# ═══════════════════════════════════════════════════════════════════
+AZUL      = "#1B3A8C"
+AZUL_DARK = "#122970"
+OURO      = "#F5A623"
+CINZA_BG  = "#F4F6FA"
+BRANCO    = "#FFFFFF"
+VERMELHO  = "#D32F2F"
+VERDE     = "#2E7D32"
+LARANJA   = "#E65100"
+AMARELO   = "#F9A825"
+
+CSS = f"""
+<style>
+/* ── Fundo geral ── */
+.stApp {{ background-color: {CINZA_BG}; }}
+
+/* ── Sidebar ── */
+[data-testid="stSidebar"] {{
+    background: linear-gradient(180deg, {AZUL_DARK} 0%, {AZUL} 100%);
+    border-right: 4px solid {OURO};
+}}
+[data-testid="stSidebar"] * {{ color: {BRANCO} !important; }}
+[data-testid="stSidebar"] .stRadio label {{ font-size: 15px; font-weight: 600; }}
+[data-testid="stSidebar"] hr {{ border-color: {OURO}44; }}
+
+/* ── Cabeçalho das páginas ── */
+.vr-header {{
+    background: linear-gradient(90deg, {AZUL_DARK}, {AZUL});
+    border-left: 6px solid {OURO};
+    border-radius: 10px;
+    padding: 18px 28px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+}}
+.vr-header h1 {{
+    color: {BRANCO};
+    margin: 0;
+    font-size: 1.7rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}}
+.vr-header p {{
+    color: {OURO};
+    margin: 4px 0 0 0;
+    font-size: 0.85rem;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}}
+
+/* ── Cards de métrica ── */
+[data-testid="metric-container"] {{
+    background: {BRANCO};
+    border: 1px solid #dde3f0;
+    border-top: 4px solid {AZUL};
+    border-radius: 10px;
+    padding: 16px 20px;
+    box-shadow: 0 2px 8px rgba(27,58,140,0.08);
+}}
+[data-testid="metric-container"] label {{
+    color: {AZUL} !important;
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+}}
+[data-testid="metric-container"] [data-testid="stMetricValue"] {{
+    color: {AZUL_DARK} !important;
+    font-size: 2rem !important;
+    font-weight: 800 !important;
+}}
+
+/* Card crítico vermelho */
+.metric-critico [data-testid="metric-container"] {{
+    border-top-color: {VERMELHO};
+}}
+
+/* ── Subheaders ── */
+.vr-section {{
+    color: {AZUL};
+    font-weight: 700;
+    font-size: 1rem;
+    border-bottom: 2px solid {OURO};
+    padding-bottom: 6px;
+    margin: 20px 0 12px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}}
+
+/* ── Botões primários ── */
+.stButton > button {{
+    background: {AZUL};
+    color: {BRANCO};
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    transition: background 0.2s, transform 0.1s;
+    padding: 8px 18px;
+}}
+.stButton > button:hover {{
+    background: {AZUL_DARK};
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(27,58,140,0.25);
+}}
+
+/* Botão de perigo (apagar) */
+.btn-danger > button {{
+    background: {VERMELHO} !important;
+}}
+.btn-danger > button:hover {{
+    background: #b71c1c !important;
+}}
+
+/* ── Tabelas ── */
+[data-testid="stDataFrame"] {{
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #dde3f0;
+    box-shadow: 0 2px 8px rgba(27,58,140,0.06);
+}}
+
+/* ── Inputs ── */
+.stNumberInput input, .stTextInput input, .stSelectbox select {{
+    border-radius: 6px;
+    border: 1.5px solid #c5cde8;
+}}
+.stNumberInput input:focus, .stTextInput input:focus {{
+    border-color: {AZUL};
+    box-shadow: 0 0 0 2px rgba(27,58,140,0.15);
+}}
+
+/* ── Divider personalizado ── */
+.vr-divider {{
+    border: none;
+    border-top: 2px solid #dde3f0;
+    margin: 20px 0;
+}}
+
+/* ── Rodapé ── */
+.vr-footer {{
+    text-align: center;
+    color: #8a94b2;
+    font-size: 0.75rem;
+    padding: 24px 0 8px 0;
+    border-top: 1px solid #dde3f0;
+    margin-top: 40px;
+}}
+</style>
+"""
+
+# ═══════════════════════════════════════════════════════════════════
+# CONFIG
+# ═══════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Inventário de Degraus",
-    layout="wide"
+    page_title="Via Raposo — Inventário de Degraus",
+    page_icon="🛣️",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+st.markdown(CSS, unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════
+# LOGO NA SIDEBAR
+# ═══════════════════════════════════════════════════════════════════
+logo_path = "logo-viaraposo-2.png"
+if os.path.exists(logo_path):
+    with open(logo_path, "rb") as f:
+        logo_b64 = base64.b64encode(f.read()).decode()
+    st.sidebar.markdown(
+        f"""
+        <div style="text-align:center; padding: 18px 0 8px 0;">
+            <img src="data:image/png;base64,{logo_b64}"
+                 style="width:160px; filter: brightness(0) invert(1);">
+        </div>
+        <hr style="border-color:#F5A62366; margin: 4px 0 16px 0;">
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    st.sidebar.markdown(
+        f"""<div style="text-align:center; padding:16px 0 8px 0;">
+            <span style="font-size:2rem;">🛣️</span><br>
+            <span style="color:#F5A623; font-weight:800; font-size:1.1rem; letter-spacing:1px;">VIA RAPOSO</span>
+        </div><hr style="border-color:#F5A62366; margin:4px 0 16px 0;">""",
+        unsafe_allow_html=True
+    )
+
+# ── Menu ──────────────────────────────────────────────────────────
+# Saudação + logout
+st.sidebar.markdown(
+    f'''<div style="padding:8px 0 12px 0; text-align:center;">
+        <span style="color:#F5A623; font-size:0.75rem; font-weight:700;">👤 {st.session_state["nome"]}</span>
+    </div>''',
+    unsafe_allow_html=True
+)
+if st.sidebar.button("🚪 Sair", use_container_width=True, key="logout_btn"):
+    for k in ["logado","usuario","nome","perfil"]:
+        st.session_state.pop(k, None)
+    st.rerun()
+
+st.sidebar.markdown("<hr style='border-color:#F5A62366; margin:4px 0 12px 0;'>", unsafe_allow_html=True)
+
+st.sidebar.markdown(
+    '<p style="color:#F5A623; font-size:0.7rem; letter-spacing:2px; font-weight:700; margin-bottom:4px;">NAVEGAÇÃO</p>',
+    unsafe_allow_html=True
+)
+# Admin vê tudo; operador não vê o Dashboard completo
+if st.session_state["perfil"] == "admin":
+    opcoes = ["🏠  Dashboard", "📋  Pontos Cadastrados", "📷  Cadastrar Fotos"]
+else:
+    opcoes = ["📋  Pontos Cadastrados", "📷  Cadastrar Fotos"]
 
 pagina = st.sidebar.radio(
-    "Menu",
-    [
-        "Dashboard",
-        "Pontos Cadastrados",
-        "Cadastrar Fotos"
-    ]
+    "Página",
+    opcoes,
+    label_visibility="collapsed"
 )
+pagina = pagina.split("  ")[-1].strip()  # extrai nome limpo
 
-# =========================================
+# ═══════════════════════════════════════════════════════════════════
 # KMZ
-# =========================================
+# ═══════════════════════════════════════════════════════════════════
 
 @st.cache_resource
 def carregar_kmz():
-
     todos_os_marcos = []
     rodovias = {}
 
@@ -58,49 +394,31 @@ def carregar_kmz():
     def process_folder(folder):
         nome = folder.find("kml:name", ns)
         nome_folder = nome.text if nome is not None else ""
-
         rodovia = None
         m = re.search(r'(SPA\s*\d+/\d+|SP\s*\d+)', nome_folder.upper())
         if m:
             rodovia = normalizar_rodovia(m.group())
-
         if rodovia:
             rodovias.setdefault(rodovia, [])
-
             for pm in folder.findall("kml:Placemark", ns):
                 nm = pm.find("kml:name", ns)
                 pt = pm.find(".//kml:Point/kml:coordinates", ns)
-
                 if nm is None or pt is None:
                     continue
-
                 km_match = re.search(r'(\d+(?:[.,]\d+)?)', str(nm.text))
                 if not km_match:
                     continue
-
                 km = float(km_match.group(1).replace(",", "."))
                 lon, lat, *_ = map(float, pt.text.strip().split(","))
-
-                registro = (km, lat, lon)
-                rodovias[rodovia].append(registro)
-
-                # FIX: estava com indentação incorreta — deve estar dentro do for pm
-                todos_os_marcos.append({
-                    "rodovia": rodovia,
-                    "km": km,
-                    "lat": lat,
-                    "lon": lon
-                })
-
+                rodovias[rodovia].append((km, lat, lon))
+                todos_os_marcos.append({"rodovia": rodovia, "km": km, "lat": lat, "lon": lon})
         for sub in folder.findall("kml:Folder", ns):
             process_folder(sub)
 
     for folder in rootxml.findall(".//kml:Folder", ns):
         process_folder(folder)
-
     for rodovia in rodovias:
         rodovias[rodovia].sort(key=lambda x: x[0])
-
     return todos_os_marcos, rodovias
 
 
@@ -122,42 +440,26 @@ def descobrir_rodovia(lat, lon):
 
 def calcular_km_real(rodovia, lat, lon):
     dados = RODOVIAS[rodovia]
-    melhor_dist = None
-    melhor_km = None
-
+    melhor_dist, melhor_km = None, None
     for i in range(len(dados) - 1):
         km1, lat1, lon1 = dados[i]
         km2, lat2, lon2 = dados[i + 1]
-
-        abx = lon2 - lon1
-        aby = lat2 - lat1
-        apx = lon - lon1
-        apy = lat - lat1
-
+        abx, aby = lon2 - lon1, lat2 - lat1
+        apx, apy = lon - lon1, lat - lat1
         ab2 = abx * abx + aby * aby
         if ab2 == 0:
             continue
-
-        t = (apx * abx + apy * aby) / ab2
-        t = max(0, min(1, t))
-
-        dist = np.sqrt(
-            (lon - (lon1 + abx * t))**2 +
-            (lat - (lat1 + aby * t))**2
-        )
-
+        t = max(0, min(1, (apx * abx + apy * aby) / ab2))
+        dist = np.sqrt((lon - (lon1 + abx * t))**2 + (lat - (lat1 + aby * t))**2)
         km_real = km1 + (km2 - km1) * t
-
         if melhor_dist is None or dist < melhor_dist:
-            melhor_dist = dist
-            melhor_km = km_real
-
+            melhor_dist, melhor_km = dist, km_real
     return round(melhor_km, 3)
 
 
-# =========================================
-# Carregar dados do banco
-# =========================================
+# ═══════════════════════════════════════════════════════════════════
+# BANCO
+# ═══════════════════════════════════════════════════════════════════
 
 @st.cache_data
 def carregar_dados():
@@ -173,207 +475,221 @@ def carregar_dados():
     return df
 
 
-df = carregar_dados()
+def _header(icone, titulo, subtitulo=""):
+    st.markdown(
+        f"""<div class="vr-header">
+            <div>
+                <h1>{icone} {titulo}</h1>
+                {"<p>" + subtitulo + "</p>" if subtitulo else ""}
+            </div>
+        </div>""",
+        unsafe_allow_html=True
+    )
 
-# Padronizar nomes para o dashboard
-df = df.rename(columns={
-    "arquivo": "Arquivo",
-    "rodovia": "Rodovia Encontrada",
-    "km_real": "KM Real",
-    "sentido": "Sentido",
-    "latitude": "Latitude",
-    "longitude": "Longitude",
-    "degrau": "Degrau",
-    "data": "Data"
+
+def _section(texto):
+    st.markdown(f'<p class="vr-section">{texto}</p>', unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# CARREGAR & PREPARAR
+# ═══════════════════════════════════════════════════════════════════
+
+df = carregar_dados().rename(columns={
+    "arquivo": "Arquivo", "rodovia": "Rodovia Encontrada",
+    "km_real": "KM Real", "sentido": "Sentido",
+    "latitude": "Latitude", "longitude": "Longitude",
+    "degrau": "Degrau", "data": "Data"
 })
-
-# =========================================
-# Tratamento
-# =========================================
-
 if len(df):
     df["KM Real"] = pd.to_numeric(df["KM Real"], errors="coerce")
-    df["Degrau"] = pd.to_numeric(df["Degrau"], errors="coerce")
+    df["Degrau"]  = pd.to_numeric(df["Degrau"],  errors="coerce")
 
-# =========================================
-# Sidebar – Filtros
-# =========================================
+# ── Filtros sidebar (só aparecem no Dashboard) ─────────────────────
+if pagina == "Dashboard":
+    st.sidebar.markdown('<hr style="border-color:#F5A62366; margin:16px 0 10px 0;">', unsafe_allow_html=True)
+    st.sidebar.markdown(
+        '<p style="color:#F5A623; font-size:0.7rem; letter-spacing:2px; font-weight:700; margin-bottom:4px;">FILTROS</p>',
+        unsafe_allow_html=True
+    )
+    rodovia_filtro = st.sidebar.multiselect("Rodovia", sorted(df["Rodovia Encontrada"].dropna().unique()))
+    sentido_filtro = st.sidebar.multiselect("Sentido",  sorted(df["Sentido"].dropna().unique()))
+    km_ini = st.sidebar.number_input("KM Inicial", value=0.0)
+    km_fim = st.sidebar.number_input(
+        "KM Final",
+        value=float(df["KM Real"].max()) if len(df) and df["KM Real"].notna().any() else 0.0
+    )
+    dff = df.copy()
+    if rodovia_filtro:
+        dff = dff[dff["Rodovia Encontrada"].isin(rodovia_filtro)]
+    if sentido_filtro:
+        dff = dff[dff["Sentido"].isin(sentido_filtro)]
+    dff = dff[(dff["KM Real"] >= km_ini) & (dff["KM Real"] <= km_fim)]
+else:
+    dff = df.copy()
 
-st.sidebar.title("Filtros")
-
-rodovia_filtro = st.sidebar.multiselect(
-    "Rodovia",
-    sorted(df["Rodovia Encontrada"].dropna().unique())
+# Rodapé sidebar
+st.sidebar.markdown(
+    f"""<div style="position:fixed; bottom:0; left:0; width:inherit;
+                    padding:12px; border-top:1px solid #F5A62333;
+                    background:{AZUL_DARK};">
+        <p style="color:#8899cc; font-size:0.68rem; margin:0; text-align:center;">
+            © Via Raposo Concessões<br>Inventário de Degraus v1.0
+        </p>
+    </div>""",
+    unsafe_allow_html=True
 )
 
-sentido_filtro = st.sidebar.multiselect(
-    "Sentido",
-    sorted(df["Sentido"].dropna().unique())
-)
 
-km_ini = st.sidebar.number_input("KM Inicial", value=0.0)
-km_fim = st.sidebar.number_input(
-    "KM Final",
-    value=float(df["KM Real"].max()) if len(df) and df["KM Real"].notna().any() else 0.0
-)
-
-# =========================================
-# Filtrar
-# =========================================
-
-dff = df.copy()
-
-if rodovia_filtro:
-    dff = dff[dff["Rodovia Encontrada"].isin(rodovia_filtro)]
-
-if sentido_filtro:
-    dff = dff[dff["Sentido"].isin(sentido_filtro)]
-
-dff = dff[(dff["KM Real"] >= km_ini) & (dff["KM Real"] <= km_fim)]
-
-# =========================================
-# DASHBOARD
-# =========================================
+# ═══════════════════════════════════════════════════════════════════
+# PÁGINA: DASHBOARD
+# ═══════════════════════════════════════════════════════════════════
 
 if pagina == "Dashboard":
 
-    st.title("🚧 Inventário de Degraus")
+    _header("🛣️", "Inventário de Degraus", "Via Raposo Concessões — Monitoramento de Pavimento")
 
-    # Cards
+    # ── Métricas ───────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
+    c1.metric("📸  Total de Fotos",   len(dff))
+    c2.metric("📏  Degrau Médio",
+              f"{dff['Degrau'].mean():.1f} mm" if dff["Degrau"].notna().any() else "—")
+    c3.metric("⚠️  Degrau Máximo",
+              f"{dff['Degrau'].max():.1f} mm"  if dff["Degrau"].notna().any() else "—")
+    c4.metric("🔴  Críticos (>30mm)", int((dff["Degrau"] > 30).sum()))
 
-    c1.metric("Fotos", len(dff))
+    st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
 
-    c2.metric(
-        "Degrau Médio",
-        round(dff["Degrau"].mean(), 1) if dff["Degrau"].notna().any() else "—"
-    )
-
-    c3.metric(
-        "Degrau Máximo",
-        round(dff["Degrau"].max(), 1) if dff["Degrau"].notna().any() else "—"
-    )
-
-    c4.metric(
-        "Críticos (>30mm)",
-        len(dff[dff["Degrau"] > 30])
-    )
-
-    # Layout principal
+    # ── Mapa + Scatter ─────────────────────────────────────────────
     col_mapa, col_graf = st.columns([1.3, 1])
 
-    # Mapa
     with col_mapa:
-        st.subheader("Mapa")
-
+        _section("📍 Localização dos Pontos")
         dff_mapa = dff.dropna(subset=["Latitude", "Longitude"])
-
         if len(dff_mapa):
-            lat_center = dff_mapa["Latitude"].mean()
-            lon_center = dff_mapa["Longitude"].mean()
-
-            mapa = folium.Map(location=[lat_center, lon_center], zoom_start=11)
-
+            mapa = folium.Map(
+                location=[dff_mapa["Latitude"].mean(), dff_mapa["Longitude"].mean()],
+                zoom_start=11,
+                tiles="CartoDB positron"
+            )
             for _, row in dff_mapa.iterrows():
-                degrau = row["Degrau"]
-                cor = "green"
-                if pd.notna(degrau):
-                    if degrau > 30:
-                        cor = "red"
-                    elif degrau > 20:
-                        cor = "orange"
-                    elif degrau > 10:
-                        cor = "yellow"
-
-                popup = f"""
-                <b>Arquivo:</b> {row['Arquivo']}<br>
-                <b>Rodovia:</b> {row['Rodovia Encontrada']}<br>
-                <b>KM:</b> {row['KM Real']}<br>
-                <b>Degrau:</b> {row['Degrau']} mm<br>
-                <b>Sentido:</b> {row['Sentido']}
-                """
-
+                d = row["Degrau"]
+                cor = VERDE if not pd.notna(d) else (
+                    VERMELHO if d > 30 else LARANJA if d > 20 else AMARELO if d > 10 else VERDE
+                )
+                popup = (f"<b style='color:{AZUL}'>{row['Arquivo']}</b><br>"
+                         f"<b>Rodovia:</b> {row['Rodovia Encontrada']}<br>"
+                         f"<b>KM:</b> {row['KM Real']}<br>"
+                         f"<b>Degrau:</b> {row['Degrau']} mm<br>"
+                         f"<b>Sentido:</b> {row['Sentido']}")
                 folium.CircleMarker(
                     location=[row["Latitude"], row["Longitude"]],
-                    radius=4,
-                    color=cor,
-                    fill=True,
-                    popup=popup
+                    radius=6, color=cor, fill=True, fill_opacity=0.85,
+                    popup=folium.Popup(popup, max_width=260)
                 ).add_to(mapa)
-
-            st_folium(mapa, width=900, height=650)
+            st_folium(mapa, width=None, height=520, use_container_width=True)
         else:
-            st.info("Nenhum ponto com coordenadas válidas para exibir no mapa.")
+            st.info("Nenhum ponto com coordenadas válidas.")
 
-    # Gráfico Degrau x KM
     with col_graf:
-        st.subheader("Degrau x KM")
-
+        _section("📈 Degrau × KM")
         fig = px.scatter(
-            dff,
-            x="KM Real",
-            y="Degrau",
+            dff, x="KM Real", y="Degrau",
             color="Rodovia Encontrada",
-            hover_data=["Arquivo"]
+            hover_data=["Arquivo"],
+            color_discrete_sequence=[AZUL, OURO, "#5c6bc0", "#26a69a"],
         )
+        fig.update_layout(
+            plot_bgcolor=BRANCO, paper_bgcolor=BRANCO,
+            font_color=AZUL_DARK,
+            legend=dict(orientation="h", y=-0.2),
+            margin=dict(t=20, b=20, l=10, r=10),
+        )
+        fig.add_hline(y=30, line_dash="dash", line_color=VERMELHO,
+                      annotation_text="Limite crítico (30mm)",
+                      annotation_font_color=VERMELHO)
         st.plotly_chart(fig, use_container_width=True)
 
-    # Linha 2 de gráficos
-    g1, g2 = st.columns(2)
+        _section("📊 Distribuição dos Degraus")
+        fig2 = px.histogram(
+            dff, x="Degrau", nbins=20,
+            color_discrete_sequence=[AZUL]
+        )
+        fig2.update_layout(
+            plot_bgcolor=BRANCO, paper_bgcolor=BRANCO,
+            font_color=AZUL_DARK, margin=dict(t=10, b=10, l=10, r=10),
+            bargap=0.06
+        )
+        st.plotly_chart(fig2, use_container_width=True)
 
+    st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
+
+    # ── Gráficos linha 2 ──────────────────────────────────────────
+    g1, g2 = st.columns(2)
     with g1:
-        fig = px.histogram(dff, x="Rodovia Encontrada", title="Fotos por Rodovia")
+        _section("🛣️ Fotos por Rodovia")
+        fig = px.bar(
+            dff.groupby("Rodovia Encontrada", as_index=False).size().rename(columns={"size": "Qtd"}),
+            x="Rodovia Encontrada", y="Qtd",
+            color_discrete_sequence=[AZUL]
+        )
+        fig.update_layout(plot_bgcolor=BRANCO, paper_bgcolor=BRANCO, font_color=AZUL_DARK,
+                          margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
 
     with g2:
-        fig = px.histogram(dff, x="Sentido", title="Fotos por Sentido")
+        _section("🧭 Fotos por Sentido")
+        fig = px.pie(
+            dff.groupby("Sentido", as_index=False).size().rename(columns={"size": "Qtd"}),
+            names="Sentido", values="Qtd",
+            color_discrete_sequence=[AZUL, OURO, "#5c6bc0", "#26a69a"]
+        )
+        fig.update_layout(paper_bgcolor=BRANCO, font_color=AZUL_DARK,
+                          margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig, use_container_width=True)
 
-    # Histograma de degraus
-    fig = px.histogram(dff, x="Degrau", nbins=20, title="Distribuição dos Degraus")
-    st.plotly_chart(fig, use_container_width=True)
+    st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
 
-    # Ranking
-    st.subheader("Top 20 Maiores Degraus")
-
-    ranking = dff.sort_values("Degrau", ascending=False)
-
+    # ── Ranking ───────────────────────────────────────────────────
+    _section("🏆 Top 20 Maiores Degraus")
+    ranking = dff.sort_values("Degrau", ascending=False).head(20)
     st.dataframe(
-        ranking[["Rodovia Encontrada", "KM Real", "Degrau", "Sentido", "Arquivo"]].head(20),
-        use_container_width=True
+        ranking[["Rodovia Encontrada", "KM Real", "Degrau", "Sentido", "Arquivo"]],
+        use_container_width=True, hide_index=True,
+        column_config={
+            "KM Real": st.column_config.NumberColumn(format="%.3f"),
+            "Degrau":  st.column_config.NumberColumn(format="%.1f mm"),
+        }
     )
 
-# =========================================
-# CADASTRO
-# =========================================
+    st.markdown('<div class="vr-footer">Via Raposo Concessões · Sistema de Inventário de Degraus · Todos os direitos reservados</div>', unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PÁGINA: PONTOS CADASTRADOS
+# ═══════════════════════════════════════════════════════════════════
 
 elif pagina == "Pontos Cadastrados":
 
-    st.title("📋 Pontos Cadastrados")
+    _header("📋", "Pontos Cadastrados", "Gestão e edição de registros do banco de dados")
 
-    # Recarregar dados frescos do banco
     df_banco = carregar_dados().rename(columns={
-        "arquivo": "Arquivo",
-        "rodovia": "Rodovia",
-        "km_real": "KM Real",
-        "sentido": "Sentido",
-        "latitude": "Latitude",
-        "longitude": "Longitude",
-        "degrau": "Degrau (mm)",
-        "data": "Data",
-        "ocr_bruto": "OCR Bruto",
+        "arquivo": "Arquivo", "rodovia": "Rodovia",
+        "km_real": "KM Real", "sentido": "Sentido",
+        "latitude": "Latitude", "longitude": "Longitude",
+        "degrau": "Degrau (mm)", "data": "Data", "ocr_bruto": "OCR Bruto",
     })
 
     if len(df_banco) == 0:
-        st.info("Nenhum ponto cadastrado ainda. Use a página 'Cadastrar Fotos' para adicionar.")
+        st.info("Nenhum ponto cadastrado ainda. Use '📷 Cadastrar Fotos' para adicionar.")
     else:
-        df_banco["KM Real"]     = pd.to_numeric(df_banco["KM Real"], errors="coerce")
+        df_banco["KM Real"]     = pd.to_numeric(df_banco["KM Real"],     errors="coerce")
         df_banco["Degrau (mm)"] = pd.to_numeric(df_banco["Degrau (mm)"], errors="coerce")
 
-        # ── Filtros rápidos inline ────────────────────────────────────────────
+        # ── Filtros ──────────────────────────────────────────────
         fa, fb, fc, fd = st.columns(4)
-        f_rod  = fa.multiselect("Rodovia",  sorted(df_banco["Rodovia"].dropna().unique()),  key="f_rod_pts")
-        f_sent = fb.multiselect("Sentido",  sorted(df_banco["Sentido"].dropna().unique()),  key="f_sent_pts")
+        f_rod  = fa.multiselect("Rodovia", sorted(df_banco["Rodovia"].dropna().unique()), key="f_rod_pts")
+        f_sent = fb.multiselect("Sentido", sorted(df_banco["Sentido"].dropna().unique()), key="f_sent_pts")
         f_dmin = fc.number_input("Degrau mín (mm)", value=0.0, key="f_dmin")
         f_dmax = fd.number_input(
             "Degrau máx (mm)",
@@ -382,50 +698,44 @@ elif pagina == "Pontos Cadastrados":
         )
 
         df_pts = df_banco.copy()
-        if f_rod:
-            df_pts = df_pts[df_pts["Rodovia"].isin(f_rod)]
-        if f_sent:
-            df_pts = df_pts[df_pts["Sentido"].isin(f_sent)]
+        if f_rod:  df_pts = df_pts[df_pts["Rodovia"].isin(f_rod)]
+        if f_sent: df_pts = df_pts[df_pts["Sentido"].isin(f_sent)]
         df_pts = df_pts[
             (df_pts["Degrau (mm)"].isna()) |
             ((df_pts["Degrau (mm)"] >= f_dmin) & (df_pts["Degrau (mm)"] <= f_dmax))
         ].reset_index(drop=True)
 
-        # ── Métricas rápidas ──────────────────────────────────────────────────
+        # ── Métricas ──────────────────────────────────────────────
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Total de pontos", len(df_pts))
-        m2.metric("Degrau médio",   f"{df_pts['Degrau (mm)'].mean():.1f} mm" if df_pts["Degrau (mm)"].notna().any() else "—")
-        m3.metric("Degrau máximo",  f"{df_pts['Degrau (mm)'].max():.1f} mm"  if df_pts["Degrau (mm)"].notna().any() else "—")
-        m4.metric("Críticos (>30mm)", int((df_pts["Degrau (mm)"] > 30).sum()))
+        m1.metric("📸  Total de Pontos",  len(df_pts))
+        m2.metric("📏  Degrau Médio",
+                  f"{df_pts['Degrau (mm)'].mean():.1f} mm" if df_pts["Degrau (mm)"].notna().any() else "—")
+        m3.metric("⚠️  Degrau Máximo",
+                  f"{df_pts['Degrau (mm)'].max():.1f} mm"  if df_pts["Degrau (mm)"].notna().any() else "—")
+        m4.metric("🔴  Críticos (>30mm)", int((df_pts["Degrau (mm)"] > 30).sum()))
 
-        st.markdown("---")
+        st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
 
-        # Inicializar estado de edição para esta página
-        if "pts_linha" not in st.session_state:
+        # Estado da página
+        if "pts_linha" not in st.session_state: st.session_state["pts_linha"] = 0
+        if "pts_df"    not in st.session_state or len(st.session_state["pts_df"]) != len(df_pts):
+            st.session_state["pts_df"]    = df_pts.copy()
             st.session_state["pts_linha"] = 0
-        if "pts_df" not in st.session_state:
-            st.session_state["pts_df"] = df_pts.copy()
+        if "pts_confirmar_exclusao" not in st.session_state:
+            st.session_state["pts_confirmar_exclusao"] = False
 
-        # Sincronizar se filtros mudaram (shape diferente)
-        if len(st.session_state["pts_df"]) != len(df_pts):
-            st.session_state["pts_df"] = df_pts.copy()
-            st.session_state["pts_linha"] = 0
-
-        pts_df   = st.session_state["pts_df"]
-        colunas_exibir = ["Arquivo", "Rodovia", "KM Real", "Sentido",
-                          "Degrau (mm)", "Latitude", "Longitude", "Data"]
+        pts_df = st.session_state["pts_df"]
+        colunas_exibir = ["Arquivo", "Rodovia", "KM Real", "Sentido", "Degrau (mm)", "Latitude", "Longitude", "Data"]
 
         col_tab, col_img = st.columns([2, 1])
 
         with col_tab:
-            st.markdown("**Clique em uma linha para ver a foto e editar:**")
+            _section("📄 Registros — clique para selecionar")
 
             ev = st.dataframe(
                 pts_df[colunas_exibir].sort_values(["Rodovia", "KM Real"]),
-                use_container_width=True,
-                hide_index=False,
-                on_select="rerun",
-                selection_mode="single-row",
+                use_container_width=True, hide_index=False,
+                on_select="rerun", selection_mode="single-row",
                 key="pts_tabela_sel",
                 column_config={
                     "KM Real":     st.column_config.NumberColumn(format="%.3f"),
@@ -438,51 +748,80 @@ elif pagina == "Pontos Cadastrados":
             sel = ev.selection.rows if ev.selection.rows else []
             if sel:
                 st.session_state["pts_linha"] = sel[0]
+                st.session_state["pts_confirmar_exclusao"] = False
 
             idx_ativo = min(st.session_state["pts_linha"], len(pts_df) - 1)
             row_ativo = pts_df.iloc[idx_ativo]
 
-            # ── Edição da linha selecionada ───────────────────────────────────
-            st.markdown(f"---")
-            st.markdown(f"**✏️ Editando — {row_ativo['Arquivo']}**")
+            st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
+            _section(f"✏️ Editando — {row_ativo['Arquivo']}")
 
             ea, eb, ec = st.columns(3)
             novo_lat    = ea.number_input("Latitude",    value=float(row_ativo["Latitude"])    if pd.notna(row_ativo["Latitude"])    else 0.0, format="%.6f", key="pts_lat")
             novo_lon    = eb.number_input("Longitude",   value=float(row_ativo["Longitude"])   if pd.notna(row_ativo["Longitude"])   else 0.0, format="%.6f", key="pts_lon")
             novo_degrau = ec.number_input("Degrau (mm)", value=float(row_ativo["Degrau (mm)"]) if pd.notna(row_ativo["Degrau (mm)"]) else 0.0, min_value=0.0, step=1.0, key="pts_deg")
 
-            bb1, bb2 = st.columns(2)
+            ba, bb, bc = st.columns(3)
 
-            if bb1.button("✅ Aplicar edição", use_container_width=True, key="pts_aplicar"):
+            if ba.button("✅ Aplicar edição", use_container_width=True, key="pts_aplicar"):
                 pts_df.at[idx_ativo, "Latitude"]    = novo_lat
                 pts_df.at[idx_ativo, "Longitude"]   = novo_lon
                 pts_df.at[idx_ativo, "Degrau (mm)"] = novo_degrau
                 st.session_state["pts_df"] = pts_df
-                st.success("Linha atualizada na tabela.")
+                st.success("Linha atualizada.")
                 st.rerun()
 
-            if bb2.button("💾 Salvar alterações no banco", use_container_width=True, key="pts_salvar"):
+            if bb.button("💾 Salvar no banco", use_container_width=True, key="pts_salvar"):
                 try:
                     con = sqlite3.connect("banco.db")
                     for _, r in pts_df.iterrows():
-                        con.execute("""
-                            UPDATE fotos
-                               SET latitude  = ?,
-                                   longitude = ?,
-                                   degrau    = ?
-                             WHERE arquivo   = ?
-                        """, (r["Latitude"], r["Longitude"], r["Degrau (mm)"], r["Arquivo"]))
-                    con.commit()
-                    con.close()
+                        con.execute(
+                            "UPDATE fotos SET latitude=?, longitude=?, degrau=? WHERE arquivo=?",
+                            (r["Latitude"], r["Longitude"], r["Degrau (mm)"], r["Arquivo"])
+                        )
+                    con.commit(); con.close()
                     carregar_dados.clear()
-                    st.success("Alterações salvas no banco!")
+                    st.success("Alterações salvas!")
                     st.session_state.pop("pts_df", None)
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Erro ao salvar: {e}")
+                    st.error(f"Erro: {e}")
 
+            # ── Botão Apagar com confirmação ───────────────────────────────────
+            with bc:
+                if not st.session_state["pts_confirmar_exclusao"]:
+                    st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
+                    if st.button("🗑️ Apagar registro", use_container_width=True, key="pts_apagar_btn"):
+                        st.session_state["pts_confirmar_exclusao"] = True
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+                else:
+                    st.warning(f"⚠️ Confirma exclusão de **{row_ativo['Arquivo']}**?")
+                    c_sim, c_nao = st.columns(2)
+                    with c_sim:
+                        st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
+                        if st.button("✔️ Sim, apagar", use_container_width=True, key="pts_confirmar_sim"):
+                            try:
+                                con = sqlite3.connect("banco.db")
+                                con.execute("DELETE FROM fotos WHERE arquivo = ?", (row_ativo["Arquivo"],))
+                                con.commit(); con.close()
+                                carregar_dados.clear()
+                                st.session_state.pop("pts_df", None)
+                                st.session_state["pts_linha"] = 0
+                                st.session_state["pts_confirmar_exclusao"] = False
+                                st.success("Registro apagado.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro: {e}")
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    with c_nao:
+                        if st.button("✖️ Cancelar", use_container_width=True, key="pts_confirmar_nao"):
+                            st.session_state["pts_confirmar_exclusao"] = False
+                            st.rerun()
+
+        # ── Foto à direita ─────────────────────────────────────────────────────
         with col_img:
-            st.markdown("**📸 Foto selecionada**")
+            _section("📸 Foto selecionada")
 
             idx_foto  = min(st.session_state["pts_linha"], len(pts_df) - 1)
             row_foto  = pts_df.iloc[idx_foto]
@@ -496,11 +835,8 @@ elif pagina == "Pontos Cadastrados":
                 f"**Degrau:** {row_foto.get('Degrau (mm)', '—')} mm"
             )
 
-            # Tentar carregar do banco (buscar arquivo salvo em disco se existir)
-            import os
-            pastas_fotos = ["fotos", "uploads", "."]
             img_encontrada = None
-            for pasta in pastas_fotos:
+            for pasta in ["fotos", "uploads", "."]:
                 caminho = os.path.join(pasta, nome_foto)
                 if os.path.exists(caminho):
                     img_encontrada = caminho
@@ -510,189 +846,133 @@ elif pagina == "Pontos Cadastrados":
                 from PIL import Image as PILImage
                 img_full = PILImage.open(img_encontrada)
                 st.image(img_full, caption="Foto completa", use_container_width=True)
-                # Recorte da legenda
-                largura, altura = img_full.size
-                legenda_crop = img_full.crop((int(largura*0.45), int(altura*0.58), largura, altura))
+                larg, alt = img_full.size
+                legenda_crop = img_full.crop((int(larg * 0.45), int(alt * 0.58), larg, alt))
                 st.image(legenda_crop, caption="🔍 Recorte legenda", use_container_width=True)
             else:
-                st.info("Foto não encontrada em disco.  \nSalve as fotos na pasta `fotos/` do projeto para exibi-las aqui.")
+                st.info("Foto não encontrada em disco.\nSalve as fotos na pasta `fotos/` do projeto.")
 
-        # ── Exportar CSV ──────────────────────────────────────────────────────
+        st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
         csv = pts_df[colunas_exibir].to_csv(index=False).encode("utf-8")
         st.download_button("⬇️ Exportar CSV", csv, "pontos_cadastrados.csv", "text/csv")
+
+    st.markdown('<div class="vr-footer">Via Raposo Concessões · Sistema de Inventário de Degraus</div>', unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PÁGINA: CADASTRAR FOTOS
+# ═══════════════════════════════════════════════════════════════════
 
 elif pagina == "Cadastrar Fotos":
 
     from PIL import Image
-    import easyocr
-
-    st.title("📷 Cadastrar Fotos")
+    _header("📷", "Cadastrar Fotos", "Upload e processamento automático via OCR")
 
     fotos = st.file_uploader(
-        "Selecione as fotos",
+        "Selecione as fotos (JPG/PNG)",
         type=["jpg", "jpeg", "png"],
         accept_multiple_files=True
     )
 
-    @st.cache_resource
-    def carregar_ocr():
-        return easyocr.Reader(['en'], gpu=False)
-
-    reader = carregar_ocr()
-
-    # ─── Funções de extração ──────────────────────────────────────────────────
+    # ── Funções de extração ─────────────────────────────────────────────────
 
     def recortar_legenda(img):
         largura, altura = img.size
-        # Crop mais amplo: 45% da largura e 58% da altura
-        # para capturar coordenadas longas no canto inferior direito
-        x1 = int(largura * 0.45)
-        y1 = int(altura * 0.58)
-        return img.crop((x1, y1, largura, altura))
+        return img.crop((int(largura * 0.45), int(altura * 0.58), largura, altura))
 
     def extrair_rodovia(texto):
         m = re.search(r'SP\s*-?\s*(\d+)', texto, re.I)
-        if m:
-            return f"SP-{m.group(1)}"
-        return None
+        return f"SP-{m.group(1)}" if m else None
 
     def extrair_sentido(texto):
-        texto = texto.upper()
-        if re.search(r'\bPS\b', texto):
-            return "Sul"
-        if re.search(r'\bPN\b', texto):
-            return "Norte"
-        if re.search(r'\bPL\b', texto):
-            return "Leste"
-        if re.search(r'\bPO\b', texto):
-            return "Oeste"
+        t = texto.upper()
+        if re.search(r'\bPS\b', t): return "Sul"
+        if re.search(r'\bPN\b', t): return "Norte"
+        if re.search(r'\bPL\b', t): return "Leste"
+        if re.search(r'\bPO\b', t): return "Oeste"
         return None
 
     def extrair_data(texto):
         m = re.search(r'(\d{2}/\d{2}/\d{4})', texto)
-        if m:
-            return m.group(1)
-        return None
+        return m.group(1) if m else None
 
     def extrair_coordenadas(texto):
         texto = texto.replace(",", ".")
-
-        # Tentar padrão explícito  XX.XXXXXXS  YY.XXXXXXW  (colado ou separado)
-        m = re.search(
-            r'(\d{1,3}\.\d{4,})\s*S[^0-9]*(\d{1,3}\.\d{4,})\s*W',
-            texto, re.I
-        )
+        m = re.search(r'(\d{1,3}\.\d{4,})\s*S[^0-9]*(\d{1,3}\.\d{4,})\s*W', texto, re.I)
         if m:
             return -abs(float(m.group(1))), -abs(float(m.group(2)))
-
-        # Fallback: pegar todos os números com 5+ casas decimais
         numeros = re.findall(r'-?\d+\.\d{5,}', texto)
-        lat = None
-        lon = None
-
+        lat = lon = None
         for n in numeros:
             try:
-                valor = float(n)
-                # Longitude Brasil: 34 a 74 W
-                if lon is None and 34 <= abs(valor) <= 74:
-                    lon = -abs(valor)
-                    continue
-                # Latitude Brasil: 5 a 34 S
-                if lat is None and 5 <= abs(valor) <= 34:
-                    lat = -abs(valor)
-                    continue
+                v = float(n)
+                if lon is None and 34 <= abs(v) <= 74: lon = -abs(v); continue
+                if lat is None and 5  <= abs(v) <= 34: lat = -abs(v); continue
             except Exception:
                 pass
-
         return lat, lon
 
-    # ─── Processar fotos ──────────────────────────────────────────────────────
+    # ── Processar ───────────────────────────────────────────────────────────
 
     if fotos:
-
-        if st.button("Processar Fotos"):
+        if st.button("▶️ Processar Fotos", use_container_width=False):
+            import pytesseract
 
             dados = []
             barra = st.progress(0)
-            total = len(fotos)
-
             for i, foto in enumerate(fotos):
                 try:
-                    img = Image.open(foto)
+                    img     = Image.open(foto)
                     legenda = recortar_legenda(img)
-
-                    texto_lido = reader.readtext(
-                        np.array(legenda),
-                        detail=0,
-                        paragraph=False
+                    # Pré-processar imagem para melhorar OCR
+                    import PIL.ImageOps, PIL.ImageFilter
+                    legenda_ocr = legenda.convert("L")  # escala de cinza
+                    legenda_ocr = legenda_ocr.filter(PIL.ImageFilter.SHARPEN)
+                    texto = pytesseract.image_to_string(
+                        legenda_ocr,
+                        config="--psm 6 --oem 3"
                     )
-
-                    texto = "\n".join(texto_lido)
-
+                    lat, lon = extrair_coordenadas(texto)
                     dados.append({
-                        "Arquivo":   foto.name,
-                        "Rodovia":   extrair_rodovia(texto),
-                        "Sentido":   extrair_sentido(texto),
-                        "Latitude":  extrair_coordenadas(texto)[0],
-                        "Longitude": extrair_coordenadas(texto)[1],
-                        "Data":      extrair_data(texto),
-                        "Degrau":    None,          # editável pelo usuário
-                        "KM Real":   None,
-                        "OCR Bruto": texto
+                        "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
+                        "Sentido": extrair_sentido(texto), "Latitude": lat,
+                        "Longitude": lon, "Data": extrair_data(texto),
+                        "Degrau": None, "KM Real": None, "OCR Bruto": texto
                     })
-
                 except Exception as e:
                     dados.append({
-                        "Arquivo":   foto.name,
-                        "Rodovia":   None,
-                        "Sentido":   None,
-                        "Latitude":  None,
-                        "Longitude": None,
-                        "Data":      None,
-                        "Degrau":    None,
-                        "KM Real":   None,
-                        "OCR Bruto": str(e)
+                        "Arquivo": foto.name, "Rodovia": None, "Sentido": None,
+                        "Latitude": None, "Longitude": None, "Data": None,
+                        "Degrau": None, "KM Real": None, "OCR Bruto": str(e)
                     })
-
-                barra.progress((i + 1) / total)
+                barra.progress((i + 1) / len(fotos))
 
             st.session_state["resultado_editado"] = pd.DataFrame(dados)
-            # Guardar as imagens originais para exibição na tabela
-            st.session_state["fotos_dict"] = {
-                f.name: f for f in fotos
-            }
-            st.success(f"{len(dados)} fotos processadas")
+            st.session_state["fotos_dict"] = {f.name: f for f in fotos}
+            st.success(f"✅ {len(dados)} fotos processadas")
 
-        # ─── Tabela editável + visualizador de foto ──────────────────────────
+        # ── Tabela + Foto ────────────────────────────────────────────────────
 
         if "resultado_editado" in st.session_state:
 
             tabela = st.session_state["resultado_editado"]
             fotos_dict = st.session_state.get("fotos_dict", {})
-            nomes = tabela["Arquivo"].tolist()
 
-            # Inicializar índice selecionado
             if "linha_selecionada" not in st.session_state:
                 st.session_state["linha_selecionada"] = 0
 
-            # Layout: tabela à esquerda, foto à direita
             col_tabela, col_foto = st.columns([2, 1])
 
             with col_tabela:
-                st.markdown("**Clique em uma linha para ver a foto. Edite Lat, Lon e Degrau diretamente:**")
+                _section("📄 Resultados — clique para ver a foto")
 
-                # Tabela clicável para selecionar linha (dispara rerun automático)
                 evento = st.dataframe(
                     tabela[["Arquivo", "Rodovia", "Sentido", "KM Real",
                              "Latitude", "Longitude", "Degrau", "Data"]],
-                    use_container_width=True,
-                    hide_index=False,
-                    on_select="rerun",
-                    selection_mode="single-row",
+                    use_container_width=True, hide_index=False,
+                    on_select="rerun", selection_mode="single-row",
                     key="tabela_sel",
                 )
-
-                # Capturar linha clicada
                 sel_rows = evento.selection.rows if evento.selection.rows else []
                 if sel_rows:
                     st.session_state["linha_selecionada"] = sel_rows[0]
@@ -700,31 +980,19 @@ elif pagina == "Cadastrar Fotos":
                 idx_ativo = st.session_state["linha_selecionada"]
                 row_ativo = tabela.iloc[idx_ativo]
 
-                # ── Painel de edição da linha selecionada ──────────────────────
-                st.markdown(f"---")
-                st.markdown(f"**✏️ Editando linha {idx_ativo} — {row_ativo['Arquivo']}**")
+                st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
+                _section(f"✏️ Editando linha {idx_ativo} — {row_ativo['Arquivo']}")
 
                 ed1, ed2, ed3 = st.columns(3)
-
                 novo_lat = ed1.number_input(
-                    "Latitude",
-                    value=float(row_ativo["Latitude"]) if pd.notna(row_ativo["Latitude"]) else 0.0,
-                    format="%.6f",
-                    key=f"lat_{idx_ativo}"
-                )
+                    "Latitude",  value=float(row_ativo["Latitude"])  if pd.notna(row_ativo["Latitude"])  else 0.0,
+                    format="%.6f", key=f"lat_{idx_ativo}")
                 novo_lon = ed2.number_input(
-                    "Longitude",
-                    value=float(row_ativo["Longitude"]) if pd.notna(row_ativo["Longitude"]) else 0.0,
-                    format="%.6f",
-                    key=f"lon_{idx_ativo}"
-                )
+                    "Longitude", value=float(row_ativo["Longitude"]) if pd.notna(row_ativo["Longitude"]) else 0.0,
+                    format="%.6f", key=f"lon_{idx_ativo}")
                 novo_degrau = ed3.number_input(
-                    "Degrau (mm)",
-                    value=float(row_ativo["Degrau"]) if pd.notna(row_ativo["Degrau"]) else 0.0,
-                    min_value=0.0,
-                    step=1.0,
-                    key=f"deg_{idx_ativo}"
-                )
+                    "Degrau (mm)", value=float(row_ativo["Degrau"]) if pd.notna(row_ativo["Degrau"]) else 0.0,
+                    min_value=0.0, step=1.0, key=f"deg_{idx_ativo}")
 
                 if st.button("✅ Aplicar edição na linha", key="aplicar_edicao"):
                     tabela.at[idx_ativo, "Latitude"]  = novo_lat
@@ -734,13 +1002,10 @@ elif pagina == "Cadastrar Fotos":
                     st.success(f"Linha {idx_ativo} atualizada.")
                     st.rerun()
 
-            # ─── Painel de foto à direita ──────────────────────────────────────
             with col_foto:
-                st.markdown("**📸 Foto selecionada**")
-
-                # Sincroniza com a linha clicada na tabela
-                idx_foto = st.session_state["linha_selecionada"]
-                row_foto = st.session_state["resultado_editado"].iloc[idx_foto]
+                _section("📸 Foto selecionada")
+                idx_foto  = st.session_state["linha_selecionada"]
+                row_foto  = st.session_state["resultado_editado"].iloc[idx_foto]
                 nome_foto = row_foto["Arquivo"]
 
                 st.caption(f"**{nome_foto}**")
@@ -750,98 +1015,57 @@ elif pagina == "Cadastrar Fotos":
                     f"**Sentido:** {row_foto.get('Sentido', '—')}  \n"
                     f"**Degrau:** {row_foto.get('Degrau', '—')} mm"
                 )
-
                 if nome_foto in fotos_dict:
                     arq = fotos_dict[nome_foto]
                     arq.seek(0)
                     img_full = Image.open(arq)
-
-                    # Foto completa
                     st.image(img_full, caption="Foto completa", use_container_width=True)
-
-                    # Recorte da legenda (mesmo crop do OCR)
-                    legenda_crop = recortar_legenda(img_full)
-                    st.image(
-                        legenda_crop,
-                        caption="🔍 Recorte da legenda (OCR)",
-                        use_container_width=True
-                    )
+                    st.image(recortar_legenda(img_full), caption="🔍 Recorte OCR", use_container_width=True)
                 else:
-                    st.info("Foto não disponível (recarregue e reprocesse as imagens).")
+                    st.info("Foto não disponível.")
 
-            # ─── Botões de ação ────────────────────────────────────────────────
-
+            # ── Ações ─────────────────────────────────────────────────────────
+            st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
             col_b1, col_b2 = st.columns(2)
 
             with col_b1:
                 if st.button("🔄 Recalcular KM", use_container_width=True):
-
                     tabela_calc = st.session_state["resultado_editado"].copy()
-
                     for idx, row in tabela_calc.iterrows():
                         try:
-                            lat = float(row["Latitude"])
-                            lon = float(row["Longitude"])
-                            rod = descobrir_rodovia(lat, lon)
+                            lat = float(row["Latitude"]); lon = float(row["Longitude"])
+                            rod    = descobrir_rodovia(lat, lon)
                             km_real = calcular_km_real(rod, lat, lon)
-                            tabela_calc.at[idx, "Rodovia"] = rod
-                            tabela_calc.at[idx, "KM Real"] = km_real
+                            tabela_calc.at[idx, "Rodovia"]  = rod
+                            tabela_calc.at[idx, "KM Real"]  = km_real
                         except Exception:
                             pass
-
                     st.session_state["resultado_editado"] = tabela_calc
-                    st.success("KM recalculado com sucesso.")
+                    st.success("KM recalculado.")
                     st.rerun()
 
             with col_b2:
                 if st.button("💾 Salvar Cadastro", use_container_width=True):
-
                     tabela_salvar = st.session_state["resultado_editado"].copy()
-
                     try:
                         con = sqlite3.connect("banco.db")
                         cur = con.cursor()
-
-                        cur.execute("""
-                            CREATE TABLE IF NOT EXISTS fotos (
-                                arquivo   TEXT,
-                                rodovia   TEXT,
-                                km_real   REAL,
-                                sentido   TEXT,
-                                latitude  REAL,
-                                longitude REAL,
-                                degrau    REAL,
-                                data      TEXT,
-                                ocr_bruto TEXT
-                            )
-                        """)
-
+                        cur.execute("""CREATE TABLE IF NOT EXISTS fotos (
+                            arquivo TEXT, rodovia TEXT, km_real REAL, sentido TEXT,
+                            latitude REAL, longitude REAL, degrau REAL, data TEXT, ocr_bruto TEXT)""")
                         for _, row in tabela_salvar.iterrows():
-                            cur.execute("""
-                                INSERT INTO fotos
-                                (arquivo, rodovia, km_real, sentido,
-                                 latitude, longitude, degrau, data, ocr_bruto)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (
-                                row.get("Arquivo"),
-                                row.get("Rodovia"),
-                                row.get("KM Real"),
-                                row.get("Sentido"),
-                                row.get("Latitude"),
-                                row.get("Longitude"),
-                                row.get("Degrau"),
-                                row.get("Data"),
-                                row.get("OCR Bruto"),
-                            ))
-
-                        con.commit()
-                        con.close()
-
+                            cur.execute(
+                                "INSERT INTO fotos (arquivo,rodovia,km_real,sentido,latitude,longitude,degrau,data,ocr_bruto) VALUES (?,?,?,?,?,?,?,?,?)",
+                                (row.get("Arquivo"), row.get("Rodovia"), row.get("KM Real"),
+                                 row.get("Sentido"), row.get("Latitude"), row.get("Longitude"),
+                                 row.get("Degrau"), row.get("Data"), row.get("OCR Bruto"))
+                            )
+                        con.commit(); con.close()
                         carregar_dados.clear()
-
-                        st.success(f"{len(tabela_salvar)} registros salvos no banco.")
+                        st.success(f"✅ {len(tabela_salvar)} registros salvos.")
                         st.session_state.pop("resultado_editado", None)
                         st.session_state.pop("fotos_dict", None)
-
                     except Exception as e:
                         st.error(f"Erro ao salvar: {e}")
+
+    st.markdown('<div class="vr-footer">Via Raposo Concessões · Sistema de Inventário de Degraus</div>', unsafe_allow_html=True)
