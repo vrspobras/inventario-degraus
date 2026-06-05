@@ -1012,8 +1012,6 @@ elif pagina == "Cadastrar Fotos":
                 img         = Image.open(foto)
                 # Envia foto inteira para o Gemini — ele localiza a legenda sozinho
                 texto = ocr_claude(img)
-                # Debug — mostra o texto bruto lido pelo Claude
-                st.caption(f"🔍 OCR bruto: `{texto[:200]}`")
                 lat, lon = extrair_coordenadas(texto)
                 dados.append({
                     "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
@@ -1058,7 +1056,7 @@ elif pagina == "Cadastrar Fotos":
 
                 evento = st.dataframe(
                     tabela[["Arquivo", "Rodovia", "Sentido", "KM Real",
-                             "Latitude", "Longitude", "Degrau", "Data"]],
+                             "Latitude", "Longitude", "Degrau", "Data", "OCR Bruto"]],
                     use_container_width=True, hide_index=False,
                     on_select="rerun", selection_mode="single-row",
                     key="tabela_sel",
