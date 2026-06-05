@@ -900,9 +900,12 @@ elif pagina == "Cadastrar Fotos":
         resp = model.generate_content([
             img_gemini,
             (
-                "Leia APENAS o texto da legenda desta foto de campo. "
-                "Retorne somente o texto lido, sem explicações. "
-                "Inclua data, coordenadas GPS, KM, rodovia e sentido se presentes."
+                "Esta é uma foto de campo de inspeção de rodovia. "
+                "No canto inferior direito há uma legenda com texto sobreposto. "
+                "Leia e retorne EXATAMENTE o texto dessa legenda, incluindo: "
+                "data/hora, coordenadas GPS (todos os dígitos), KM, número da rodovia e sentido. "
+                "Retorne apenas o texto lido, sem comentários ou explicações. "
+                "Se houver coordenadas com muitas casas decimais, copie todos os dígitos."
             )
         ])
         return resp.text
@@ -1000,8 +1003,8 @@ elif pagina == "Cadastrar Fotos":
 
             try:
                 img         = Image.open(foto)
-                legenda = recortar_legenda(img)
-                texto   = ocr_gemini(legenda)
+                # Envia foto inteira para o Gemini — ele localiza a legenda sozinho
+                texto = ocr_gemini(img)
                 lat, lon = extrair_coordenadas(texto)
                 dados.append({
                     "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
