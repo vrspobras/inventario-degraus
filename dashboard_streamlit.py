@@ -882,16 +882,30 @@ elif pagina == "Cadastrar Fotos":
         largura, altura = img.size
         return img.crop((int(largura * 0.45), int(altura * 0.58), largura, altura))
 
-    def preprocessar_para_ocr(img_pil):
-        """Prepara a imagem para o Tesseract — rápido e eficaz."""
-        import PIL.ImageEnhance
-        # Escala de cinza
-        img_pil = img_pil.convert("L")
-        # Contraste moderado
-        img_pil = PIL.ImageEnhance.Contrast(img_pil).enhance(2.0)
-        # Binarizar
-        img_pil = img_pil.point(lambda p: 255 if p > 140 else 0)
-        return img_pil
+    def ocr_gemini(img_pil):
+        """Extrai texto da legenda usando Gemini Flash — grátis e rápido."""
+        import google.generativeai as genai
+        import io
+
+        genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
+        model = genai.GenerativeModel("gemini-1.5-flash")
+
+        buf = io.BytesIO()
+        img_pil.save(buf, format="JPEG", quality=85)
+        buf.seek(0)
+
+        from PIL import Image as PILImage
+        img_gemini = PILImage.open(buf)
+
+        resp = model.generate_content([
+            img_gemini,
+            (
+                "Leia APENAS o texto da legenda desta foto de campo. "
+                "Retorne somente o texto lido, sem explicações. "
+                "Inclua data, coordenadas GPS, KM, rodovia e sentido se presentes."
+            )
+        ])
+        return resp.text
 
     def extrair_rodovia(texto):
         m = re.search(r'SP\s*-?\s*(\d+)', texto, re.I)
@@ -973,7 +987,6 @@ elif pagina == "Cadastrar Fotos":
 
         # ── Processamento incremental (uma foto por rerun) ─────────────────
         if st.session_state.get("processando") and st.session_state.get("fila_fotos"):
-            import pytesseract
             import PIL.ImageFilter
 
             fila  = st.session_state["fila_fotos"]
@@ -987,12 +1000,8 @@ elif pagina == "Cadastrar Fotos":
 
             try:
                 img         = Image.open(foto)
-                legenda     = recortar_legenda(img)
-                legenda_ocr = preprocessar_para_ocr(legenda)
-                # PSM 6 = bloco uniforme de texto, OEM 3 = LSTM neural net
-                # whitelist: dígitos, ponto, S, W, /, espaço e letras comuns da legenda
-                config = "--psm 6 --oem 3 -c tessedit_char_whitelist=0123456789.,-/SWNEspPKkm "
-                texto = pytesseract.image_to_string(legenda_ocr, config=config)
+                legenda = recortar_legenda(img)
+                texto   = ocr_gemini(legenda)
                 lat, lon = extrair_coordenadas(texto)
                 dados.append({
                     "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
