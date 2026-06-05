@@ -847,10 +847,10 @@ elif pagina == "Pontos Cadastrados":
             if img_encontrada:
                 from PIL import Image as PILImage
                 img_full = PILImage.open(img_encontrada)
-                st.image(img_full, caption="Foto completa", use_container_width=True)
+                st.image(img_full, caption="Foto completa", use_column_width=True)
                 larg, alt = img_full.size
                 legenda_crop = img_full.crop((int(larg * 0.45), int(alt * 0.58), larg, alt))
-                st.image(legenda_crop, caption="🔍 Recorte legenda", use_container_width=True)
+                st.image(legenda_crop, caption="🔍 Recorte legenda", use_column_width=True)
             else:
                 st.info("Foto não encontrada em disco.\nSalve as fotos na pasta `fotos/` do projeto.")
 
@@ -882,6 +882,22 @@ elif pagina == "Cadastrar Fotos":
         largura, altura = img.size
         return img.crop((int(largura * 0.45), int(altura * 0.58), largura, altura))
 
+    def preprocessar_para_ocr(img_pil):
+        """Prepara a imagem para maximizar precisão do Tesseract."""
+        import PIL.ImageFilter, PIL.ImageEnhance
+        # 1. Escala 3x — Tesseract performa melhor em imagens grandes
+        w, h = img_pil.size
+        img_pil = img_pil.resize((w * 3, h * 3), Image.LANCZOS)
+        # 2. Escala de cinza
+        img_pil = img_pil.convert("L")
+        # 3. Aumentar contraste
+        img_pil = PIL.ImageEnhance.Contrast(img_pil).enhance(2.5)
+        # 4. Aumentar nitidez
+        img_pil = PIL.ImageEnhance.Sharpness(img_pil).enhance(3.0)
+        # 5. Binarizar (preto e branco puro) — ajuda muito com texto claro em fundo escuro
+        img_pil = img_pil.point(lambda p: 255 if p > 140 else 0)
+        return img_pil
+
     def extrair_rodovia(texto):
         m = re.search(r'SP\s*-?\s*(\d+)', texto, re.I)
         return f"SP-{m.group(1)}" if m else None
@@ -899,10 +915,24 @@ elif pagina == "Cadastrar Fotos":
         return m.group(1) if m else None
 
     def extrair_coordenadas(texto):
-        texto = texto.replace(",", ".")
-        m = re.search(r'(\d{1,3}\.\d{4,})\s*S[^0-9]*(\d{1,3}\.\d{4,})\s*W', texto, re.I)
+        # Normalizar: remover espaços entre dígitos, trocar vírgula por ponto
+        texto = texto.replace(",", ".").replace(" ", "")
+        # Tesseract às vezes lê "O" no lugar de "0" e "I" no lugar de "1"
+        texto = texto.replace("O", "0").replace("I", "1").replace("l", "1")
+
+        # Padrão 1: XX.XXXXXXS YY.XXXXXXW (com ou sem espaço)
+        m = re.search(r'(\d{1,3}\.\d{4,})S.{0,5}?(\d{1,3}\.\d{4,})W', texto, re.I)
         if m:
             return -abs(float(m.group(1))), -abs(float(m.group(2)))
+
+        # Padrão 2: -XX.XXXXXX -YY.XXXXXX
+        m = re.search(r'(-\d{1,3}\.\d{4,}).{0,5}?(-\d{1,3}\.\d{4,})', texto)
+        if m:
+            v1, v2 = float(m.group(1)), float(m.group(2))
+            if 5 <= abs(v1) <= 34 and 34 <= abs(v2) <= 74:
+                return v1, v2
+
+        # Padrão 3: qualquer número com 5+ casas decimais
         numeros = re.findall(r'-?\d+\.\d{5,}', texto)
         lat = lon = None
         for n in numeros:
@@ -940,8 +970,11 @@ elif pagina == "Cadastrar Fotos":
             try:
                 img         = Image.open(foto)
                 legenda     = recortar_legenda(img)
-                legenda_ocr = legenda.convert("L").filter(PIL.ImageFilter.SHARPEN)
-                texto = pytesseract.image_to_string(legenda_ocr, config="--psm 6 --oem 3")
+                legenda_ocr = preprocessar_para_ocr(legenda)
+                # PSM 6 = bloco uniforme de texto, OEM 3 = LSTM neural net
+                # whitelist: dígitos, ponto, S, W, /, espaço e letras comuns da legenda
+                config = "--psm 6 --oem 3 -c tessedit_char_whitelist=0123456789.,-/SWNEspPKkm "
+                texto = pytesseract.image_to_string(legenda_ocr, config=config)
                 lat, lon = extrair_coordenadas(texto)
                 dados.append({
                     "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
@@ -1037,7 +1070,7 @@ elif pagina == "Cadastrar Fotos":
                     arq = fotos_dict[nome_foto]
                     arq.seek(0)
                     img_full = Image.open(arq)
-                    st.image(img_full, caption="Foto completa", use_container_width=True)
+                    st.image(img_full, caption="Foto completa", use_column_width=True)
                     st.image(recortar_legenda(img_full), caption="🔍 Recorte OCR", use_container_width=True)
                 else:
                     st.info("Foto não disponível.")
