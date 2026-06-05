@@ -13,6 +13,20 @@ import sqlite3
 
 from streamlit_folium import st_folium
 
+# ═══════════════════════════════════════════════════════════════════
+# IDENTIDADE VISUAL — Via Raposo
+# ═══════════════════════════════════════════════════════════════════
+AZUL      = "#1B3A8C"
+AZUL_DARK = "#122970"
+OURO      = "#F5A623"
+CINZA_BG  = "#F4F6FA"
+BRANCO    = "#FFFFFF"
+VERMELHO  = "#D32F2F"
+VERDE     = "#2E7D32"
+LARANJA   = "#E65100"
+AMARELO   = "#F9A825"
+
+
 
 # ═══════════════════════════════════════════════════════════════════
 # USUÁRIOS — edite aqui para adicionar/remover acessos
@@ -141,18 +155,6 @@ if not st.session_state["logado"]:
     st.stop()
 
 
-# ═══════════════════════════════════════════════════════════════════
-# IDENTIDADE VISUAL — Via Raposo
-# ═══════════════════════════════════════════════════════════════════
-AZUL      = "#1B3A8C"
-AZUL_DARK = "#122970"
-OURO      = "#F5A623"
-CINZA_BG  = "#F4F6FA"
-BRANCO    = "#FFFFFF"
-VERMELHO  = "#D32F2F"
-VERDE     = "#2E7D32"
-LARANJA   = "#E65100"
-AMARELO   = "#F9A825"
 
 CSS = f"""
 <style>
