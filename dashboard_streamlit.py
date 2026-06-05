@@ -910,31 +910,54 @@ elif pagina == "Cadastrar Fotos":
         return m.group(1) if m else None
 
     def extrair_coordenadas(texto):
-        # Normalizar: remover espaços entre dígitos, trocar vírgula por ponto
-        texto = texto.replace(",", ".").replace(" ", "")
-        # Tesseract às vezes lê "O" no lugar de "0" e "I" no lugar de "1"
-        texto = texto.replace("O", "0").replace("I", "1").replace("l", "1")
+        """
+        Aceita todos os formatos:
+          -23.289552 -49.157809          (sinal negativo)
+          23.289552S 49.157809W          (letra S/W)
+          23.289552S 49.157809E          (letra E para longitude leste — raro mas possível)
+          23°17'22"S 49°09'28"W          (graus/minutos/segundos)
+        Sempre retorna (lat_negativa, lon_negativa) para Brasil
+        """
+        # Corrigir erros típicos do Tesseract
+        texto = texto.replace(",", ".").replace("O", "0").replace("l", "1")
 
-        # Padrão 1: XX.XXXXXXS YY.XXXXXXW (com ou sem espaço)
-        m = re.search(r'(\d{1,3}\.\d{4,})S.{0,5}?(\d{1,3}\.\d{4,})W', texto, re.I)
-        if m:
-            return -abs(float(m.group(1))), -abs(float(m.group(2)))
-
-        # Padrão 2: -XX.XXXXXX -YY.XXXXXX
-        m = re.search(r'(-\d{1,3}\.\d{4,}).{0,5}?(-\d{1,3}\.\d{4,})', texto)
+        # ── Padrão 1: sinal negativo  -XX.XXXX -YY.XXXX ──────────────────────
+        # Captura TODAS as casas decimais presentes na foto
+        m = re.search(r'(-\d{1,3}\.\d+)\s+(-\d{1,3}\.\d+)', texto)
         if m:
             v1, v2 = float(m.group(1)), float(m.group(2))
             if 5 <= abs(v1) <= 34 and 34 <= abs(v2) <= 74:
-                return v1, v2
+                return round(v1, 15), round(v2, 15)
 
-        # Padrão 3: qualquer número com 5+ casas decimais
+        # ── Padrão 2: XX.XXXXS YY.XXXXW  ou  XX.XXXXS YY.XXXXE ──────────────
+        m = re.search(r'(\d{1,3}\.\d+)\s*([SsNn])\s*(\d{1,3}\.\d+)\s*([WwEe])', texto)
+        if m:
+            lat = float(m.group(1)) * (-1 if m.group(2).upper() == "S" else 1)
+            lon = float(m.group(3)) * (-1 if m.group(4).upper() == "W" else 1)
+            return round(lat, 15), round(lon, 15)
+
+        # ── Padrão 3: graus minutos segundos  23°17'22"S  49°09'28"W ─────────
+        m = re.search(
+            r'(\d{1,3})[°\s](\d{1,2})[\'\s](\d{1,2}(?:\.\d+)?)["\'\s]*([SsNn])\s*'
+            r'(\d{1,3})[°\s](\d{1,2})[\'\s](\d{1,2}(?:\.\d+)?)["\'\s]*([WwEe])',
+            texto
+        )
+        if m:
+            lat = (float(m.group(1)) + float(m.group(2))/60 + float(m.group(3))/3600)
+            lon = (float(m.group(5)) + float(m.group(6))/60 + float(m.group(7))/3600)
+            lat *= -1 if m.group(4).upper() == "S" else 1
+            lon *= -1 if m.group(8).upper() == "W" else 1
+            return lat, lon
+
+        # ── Padrão 4: fallback — qualquer número com 5+ casas decimais ────────
         numeros = re.findall(r'-?\d+\.\d{5,}', texto)
         lat = lon = None
         for n in numeros:
             try:
                 v = float(n)
-                if lon is None and 34 <= abs(v) <= 74: lon = -abs(v); continue
-                if lat is None and 5  <= abs(v) <= 34: lat = -abs(v); continue
+                # Preservar todas as casas decimais originais
+                if lon is None and 34 <= abs(v) <= 74: lon = round(-abs(v), 15); continue
+                if lat is None and 5  <= abs(v) <= 34: lat = round(-abs(v), 15); continue
             except Exception:
                 pass
         return lat, lon
