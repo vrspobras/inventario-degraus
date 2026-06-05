@@ -1012,6 +1012,8 @@ elif pagina == "Cadastrar Fotos":
                 img         = Image.open(foto)
                 # Envia foto inteira para o Gemini — ele localiza a legenda sozinho
                 texto = ocr_claude(img)
+                # Debug — mostra o texto bruto lido pelo Claude
+                st.caption(f"🔍 OCR bruto: `{texto[:200]}`")
                 lat, lon = extrair_coordenadas(texto)
                 dados.append({
                     "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
@@ -1108,7 +1110,7 @@ elif pagina == "Cadastrar Fotos":
                     arq.seek(0)
                     img_full = Image.open(arq)
                     st.image(img_full, caption="Foto completa", use_column_width=True)
-                    st.image(recortar_legenda(img_full), caption="🔍 Recorte OCR", use_container_width=True)
+                    st.image(recortar_legenda(img_full), caption="🔍 Recorte OCR", use_column_width=True)
                 else:
                     st.info("Foto não disponível.")
 
