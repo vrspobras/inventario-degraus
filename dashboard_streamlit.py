@@ -882,33 +882,40 @@ elif pagina == "Cadastrar Fotos":
         largura, altura = img.size
         return img.crop((int(largura * 0.45), int(altura * 0.58), largura, altura))
 
-    def ocr_gemini(img_pil):
-        """Extrai texto da legenda usando Gemini Flash — grátis e rápido."""
-        import google.generativeai as genai
-        import io
-
-        genai.configure(api_key=os.environ.get("GEMINI_API_KEY", ""))
-        model = genai.GenerativeModel("gemini-1.5-flash")
+    def ocr_claude(img_pil):
+        """Extrai texto da legenda usando Claude Haiku — rápido e preciso."""
+        import anthropic, io
 
         buf = io.BytesIO()
         img_pil.save(buf, format="JPEG", quality=85)
-        buf.seek(0)
+        img_b64 = base64.b64encode(buf.getvalue()).decode()
 
-        from PIL import Image as PILImage
-        img_gemini = PILImage.open(buf)
-
-        resp = model.generate_content([
-            img_gemini,
-            (
-                "Esta é uma foto de campo de inspeção de rodovia. "
-                "No canto inferior direito há uma legenda com texto sobreposto. "
-                "Leia e retorne EXATAMENTE o texto dessa legenda, incluindo: "
-                "data/hora, coordenadas GPS (todos os dígitos), KM, número da rodovia e sentido. "
-                "Retorne apenas o texto lido, sem comentários ou explicações. "
-                "Se houver coordenadas com muitas casas decimais, copie todos os dígitos."
-            )
-        ])
-        return resp.text
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}
+                    },
+                    {
+                        "type": "text",
+                        "text": (
+                            "Esta é uma foto de campo de inspeção de rodovia. "
+                            "No canto inferior direito há uma legenda com texto sobreposto. "
+                            "Leia e retorne EXATAMENTE o texto dessa legenda, incluindo: "
+                            "data/hora, coordenadas GPS (todos os dígitos), KM, número da rodovia e sentido. "
+                            "Retorne apenas o texto lido, sem comentários ou explicações. "
+                            "Se houver coordenadas com muitas casas decimais, copie todos os dígitos."
+                        )
+                    }
+                ]
+            }]
+        )
+        return resp.content[0].text
 
     def extrair_rodovia(texto):
         m = re.search(r'SP\s*-?\s*(\d+)', texto, re.I)
@@ -1004,7 +1011,7 @@ elif pagina == "Cadastrar Fotos":
             try:
                 img         = Image.open(foto)
                 # Envia foto inteira para o Gemini — ele localiza a legenda sozinho
-                texto = ocr_gemini(img)
+                texto = ocr_claude(img)
                 lat, lon = extrair_coordenadas(texto)
                 dados.append({
                     "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
