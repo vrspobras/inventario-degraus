@@ -883,18 +883,13 @@ elif pagina == "Cadastrar Fotos":
         return img.crop((int(largura * 0.45), int(altura * 0.58), largura, altura))
 
     def preprocessar_para_ocr(img_pil):
-        """Prepara a imagem para maximizar precisão do Tesseract."""
-        import PIL.ImageFilter, PIL.ImageEnhance
-        # 1. Escala 3x — Tesseract performa melhor em imagens grandes
-        w, h = img_pil.size
-        img_pil = img_pil.resize((w * 3, h * 3), Image.LANCZOS)
-        # 2. Escala de cinza
+        """Prepara a imagem para o Tesseract — rápido e eficaz."""
+        import PIL.ImageEnhance
+        # Escala de cinza
         img_pil = img_pil.convert("L")
-        # 3. Aumentar contraste
-        img_pil = PIL.ImageEnhance.Contrast(img_pil).enhance(2.5)
-        # 4. Aumentar nitidez
-        img_pil = PIL.ImageEnhance.Sharpness(img_pil).enhance(3.0)
-        # 5. Binarizar (preto e branco puro) — ajuda muito com texto claro em fundo escuro
+        # Contraste moderado
+        img_pil = PIL.ImageEnhance.Contrast(img_pil).enhance(2.0)
+        # Binarizar
         img_pil = img_pil.point(lambda p: 255 if p > 140 else 0)
         return img_pil
 
