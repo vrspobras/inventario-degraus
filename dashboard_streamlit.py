@@ -918,40 +918,56 @@ elif pagina == "Cadastrar Fotos":
 
     if fotos:
         if st.button("▶️ Processar Fotos", use_container_width=False):
+            st.session_state["fila_fotos"]    = list(range(len(fotos)))
+            st.session_state["dados_ocr"]     = []
+            st.session_state["processando"]   = True
+            st.rerun()
+
+        # ── Processamento incremental (uma foto por rerun) ─────────────────
+        if st.session_state.get("processando") and st.session_state.get("fila_fotos"):
             import pytesseract
+            import PIL.ImageFilter
 
-            dados = []
-            barra = st.progress(0)
-            for i, foto in enumerate(fotos):
-                try:
-                    img     = Image.open(foto)
-                    legenda = recortar_legenda(img)
-                    # Pré-processar imagem para melhorar OCR
-                    import PIL.ImageOps, PIL.ImageFilter
-                    legenda_ocr = legenda.convert("L")  # escala de cinza
-                    legenda_ocr = legenda_ocr.filter(PIL.ImageFilter.SHARPEN)
-                    texto = pytesseract.image_to_string(
-                        legenda_ocr,
-                        config="--psm 6 --oem 3"
-                    )
-                    lat, lon = extrair_coordenadas(texto)
-                    dados.append({
-                        "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
-                        "Sentido": extrair_sentido(texto), "Latitude": lat,
-                        "Longitude": lon, "Data": extrair_data(texto),
-                        "Degrau": None, "KM Real": None, "OCR Bruto": texto
-                    })
-                except Exception as e:
-                    dados.append({
-                        "Arquivo": foto.name, "Rodovia": None, "Sentido": None,
-                        "Latitude": None, "Longitude": None, "Data": None,
-                        "Degrau": None, "KM Real": None, "OCR Bruto": str(e)
-                    })
-                barra.progress((i + 1) / len(fotos))
+            fila  = st.session_state["fila_fotos"]
+            dados = st.session_state["dados_ocr"]
+            total = len(fotos)
+            idx   = fila[0]
+            foto  = fotos[idx]
 
-            st.session_state["resultado_editado"] = pd.DataFrame(dados)
-            st.session_state["fotos_dict"] = {f.name: f for f in fotos}
-            st.success(f"✅ {len(dados)} fotos processadas")
+            prog = (total - len(fila)) / total
+            st.progress(prog, text=f"Processando {idx+1}/{total} — {foto.name}")
+
+            try:
+                img         = Image.open(foto)
+                legenda     = recortar_legenda(img)
+                legenda_ocr = legenda.convert("L").filter(PIL.ImageFilter.SHARPEN)
+                texto = pytesseract.image_to_string(legenda_ocr, config="--psm 6 --oem 3")
+                lat, lon = extrair_coordenadas(texto)
+                dados.append({
+                    "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
+                    "Sentido": extrair_sentido(texto), "Latitude": lat,
+                    "Longitude": lon, "Data": extrair_data(texto),
+                    "Degrau": None, "KM Real": None, "OCR Bruto": texto
+                })
+            except Exception as e:
+                dados.append({
+                    "Arquivo": foto.name, "Rodovia": None, "Sentido": None,
+                    "Latitude": None, "Longitude": None, "Data": None,
+                    "Degrau": None, "KM Real": None, "OCR Bruto": str(e)
+                })
+
+            # Avançar fila
+            st.session_state["dados_ocr"]   = dados
+            st.session_state["fila_fotos"]  = fila[1:]
+
+            if st.session_state["fila_fotos"]:
+                st.rerun()  # processa próxima foto
+            else:
+                # Todas processadas
+                st.session_state["processando"]        = False
+                st.session_state["resultado_editado"]  = pd.DataFrame(dados)
+                st.session_state["fotos_dict"]         = {f.name: f for f in fotos}
+                st.success(f"✅ {len(dados)} fotos processadas")
 
         # ── Tabela + Foto ────────────────────────────────────────────────────
 
