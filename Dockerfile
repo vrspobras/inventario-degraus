@@ -6,7 +6,10 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     libxrender1 \
     libxext6 \
-    ffmpeg \
+    # Tesseract OCR — muito mais leve que EasyOCR
+    tesseract-ocr \
+    tesseract-ocr-por \
+    tesseract-ocr-eng \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -16,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-RUN mkdir -p /app/easyocr_models /app/fotos
+RUN mkdir -p /app/fotos
 
 EXPOSE 8501
 
