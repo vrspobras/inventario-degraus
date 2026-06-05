@@ -14,7 +14,7 @@ import sqlite3
 from streamlit_folium import st_folium
 
 # ═══════════════════════════════════════════════════════════════════
-# IDENTIDADE VISUAL
+# IDENTIDADE VISUAL — Sistema de Inventário
 # ═══════════════════════════════════════════════════════════════════
 AZUL      = "#1B3A8C"
 AZUL_DARK = "#122970"
@@ -39,7 +39,7 @@ def _hash(senha):
 
 USUARIOS = {
     "admin": {
-        "senha": _hash("viaraposo2024"),
+        "senha": _hash("admin2024"),
         "nome":  "Administrador",
         "perfil": "admin"   # admin vê tudo
     },
@@ -104,7 +104,7 @@ def tela_login():
         st.markdown('''<div class="login-card">''', unsafe_allow_html=True)
 
         # Logo / cabeçalho
-        logo_path = "logo-viaraposo-2.png"
+        logo_path = "logo.png"
         if os.path.exists(logo_path):
             with open(logo_path, "rb") as f:
                 logo_b64 = base64.b64encode(f.read()).decode()
@@ -119,7 +119,7 @@ def tela_login():
             st.markdown(
                 f'''<div class="login-logo">
                     <span style="font-size:3rem;">🛣️</span>
-                    <h2>Via Raposo</h2>
+                    <h2>Sistema de Inventário</h2>
                     <p>Inventário de Degraus</p>
                 </div>''',
                 unsafe_allow_html=True
@@ -139,7 +139,7 @@ def tela_login():
                 st.error("Usuário ou senha incorretos.")
 
         st.markdown(
-            '<div class="login-footer">© Via Raposo Concessões · Acesso restrito</div>',
+            '<div class="login-footer">© Sistema de Inventário · Acesso restrito</div>',
             unsafe_allow_html=True
         )
         st.markdown('</div>', unsafe_allow_html=True)
@@ -302,7 +302,7 @@ CSS = f"""
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════
 st.set_page_config(
-    page_title="Via Raposo — Inventário de Degraus",
+    page_title="Sistema de Inventário — Inventário de Degraus",
     page_icon="🛣️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -312,7 +312,7 @@ st.markdown(CSS, unsafe_allow_html=True)
 # ═══════════════════════════════════════════════════════════════════
 # LOGO NA SIDEBAR
 # ═══════════════════════════════════════════════════════════════════
-logo_path = "logo-viaraposo-2.png"
+logo_path = "logo.png"
 if os.path.exists(logo_path):
     with open(logo_path, "rb") as f:
         logo_b64 = base64.b64encode(f.read()).decode()
@@ -330,7 +330,7 @@ else:
     st.sidebar.markdown(
         f"""<div style="text-align:center; padding:16px 0 8px 0;">
             <span style="font-size:2rem;">🛣️</span><br>
-            <span style="color:#F5A623; font-weight:800; font-size:1.1rem; letter-spacing:1px;">VIA RAPOSO</span>
+            <span style="color:#F5A623; font-weight:800; font-size:1.1rem; letter-spacing:1px;">INVENTÁRIO</span>
         </div><hr style="border-color:#F5A62366; margin:4px 0 16px 0;">""",
         unsafe_allow_html=True
     )
@@ -536,7 +536,7 @@ st.sidebar.markdown(
                     padding:12px; border-top:1px solid #F5A62333;
                     background:{AZUL_DARK};">
         <p style="color:#8899cc; font-size:0.68rem; margin:0; text-align:center;">
-            © Via Raposo Concessões<br>Inventário de Degraus v1.0
+            © Sistema de Inventário<br>Inventário de Degraus v1.0
         </p>
     </div>""",
     unsafe_allow_html=True
@@ -549,7 +549,7 @@ st.sidebar.markdown(
 
 if pagina == "Dashboard":
 
-    _header("🛣️", "Inventário de Degraus", "Via Raposo Concessões — Monitoramento de Pavimento")
+    _header("🛣️", "Inventário de Degraus", "Sistema de Inventário — Monitoramento de Pavimento")
 
     # ── Métricas ───────────────────────────────────────────────────
     c1, c2, c3, c4 = st.columns(4)
@@ -664,7 +664,7 @@ if pagina == "Dashboard":
         }
     )
 
-    st.markdown('<div class="vr-footer">Via Raposo Concessões · Sistema de Inventário de Degraus · Todos os direitos reservados</div>', unsafe_allow_html=True)
+    st.markdown('<div class="vr-footer">Sistema de Inventário · Sistema de Inventário de Degraus · Todos os direitos reservados</div>', unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -858,7 +858,7 @@ elif pagina == "Pontos Cadastrados":
         csv = pts_df[colunas_exibir].to_csv(index=False).encode("utf-8")
         st.download_button("⬇️ Exportar CSV", csv, "pontos_cadastrados.csv", "text/csv")
 
-    st.markdown('<div class="vr-footer">Via Raposo Concessões · Sistema de Inventário de Degraus</div>', unsafe_allow_html=True)
+    st.markdown('<div class="vr-footer">Sistema de Inventário · Sistema de Inventário de Degraus</div>', unsafe_allow_html=True)
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -1070,4 +1070,4 @@ elif pagina == "Cadastrar Fotos":
                     except Exception as e:
                         st.error(f"Erro ao salvar: {e}")
 
-    st.markdown('<div class="vr-footer">Via Raposo Concessões · Sistema de Inventário de Degraus</div>', unsafe_allow_html=True)
+    st.markdown('<div class="vr-footer">Sistema de Inventário · Sistema de Inventário de Degraus</div>', unsafe_allow_html=True)
