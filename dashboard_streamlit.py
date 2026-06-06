@@ -463,9 +463,39 @@ def calcular_km_real(rodovia, lat, lon):
 # BANCO
 # ═══════════════════════════════════════════════════════════════════
 
-@st.cache_data
+def get_conn():
+    """Retorna conexão PostgreSQL (Supabase) ou SQLite local como fallback."""
+    db_url = os.environ.get("DATABASE_URL", "")
+    if db_url:
+        import psycopg2
+        return psycopg2.connect(db_url), "pg"
+    else:
+        return sqlite3.connect("banco.db"), "sqlite"
+
+def criar_tabela():
+    con, tipo = get_conn()
+    cur = con.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS fotos (
+            arquivo   TEXT,
+            rodovia   TEXT,
+            km_real   REAL,
+            sentido   TEXT,
+            latitude  REAL,
+            longitude REAL,
+            degrau    REAL,
+            data      TEXT,
+            ocr_bruto TEXT
+        )
+    """)
+    con.commit()
+    con.close()
+
+criar_tabela()
+
+@st.cache_data(ttl=30)
 def carregar_dados():
-    con = sqlite3.connect("banco.db")
+    con, tipo = get_conn()
     try:
         df = pd.read_sql("SELECT * FROM fotos", con)
     except Exception:
@@ -804,8 +834,10 @@ elif pagina == "Pontos Cadastrados":
                         st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
                         if st.button("✔️ Sim, apagar", use_container_width=True, key="pts_confirmar_sim"):
                             try:
-                                con = sqlite3.connect("banco.db")
-                                con.execute("DELETE FROM fotos WHERE arquivo = ?", (row_ativo["Arquivo"],))
+                                con, tipo = get_conn()
+                                cur = con.cursor()
+                                ph = "%s" if tipo == "pg" else "?"
+                                cur.execute(f"DELETE FROM fotos WHERE arquivo = {ph}", (row_ativo["Arquivo"],))
                                 con.commit(); con.close()
                                 carregar_dados.clear()
                                 st.session_state.pop("pts_df", None)
@@ -1136,14 +1168,12 @@ elif pagina == "Cadastrar Fotos":
                 if st.button("💾 Salvar Cadastro", use_container_width=True):
                     tabela_salvar = st.session_state["resultado_editado"].copy()
                     try:
-                        con = sqlite3.connect("banco.db")
+                        con, tipo = get_conn()
                         cur = con.cursor()
-                        cur.execute("""CREATE TABLE IF NOT EXISTS fotos (
-                            arquivo TEXT, rodovia TEXT, km_real REAL, sentido TEXT,
-                            latitude REAL, longitude REAL, degrau REAL, data TEXT, ocr_bruto TEXT)""")
+                        ph = "%s" if tipo == "pg" else "?"
                         for _, row in tabela_salvar.iterrows():
                             cur.execute(
-                                "INSERT INTO fotos (arquivo,rodovia,km_real,sentido,latitude,longitude,degrau,data,ocr_bruto) VALUES (?,?,?,?,?,?,?,?,?)",
+                                f"INSERT INTO fotos (arquivo,rodovia,km_real,sentido,latitude,longitude,degrau,data,ocr_bruto) VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})",
                                 (row.get("Arquivo"), row.get("Rodovia"), row.get("KM Real"),
                                  row.get("Sentido"), row.get("Latitude"), row.get("Longitude"),
                                  row.get("Degrau"), row.get("Data"), row.get("OCR Bruto"))
