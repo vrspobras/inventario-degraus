@@ -356,9 +356,9 @@ st.sidebar.markdown(
 )
 # Admin vê tudo; operador não vê o Dashboard completo
 if st.session_state["perfil"] == "admin":
-    opcoes = ["🏠  Dashboard", "📋  Pontos Cadastrados", "📷  Cadastrar Fotos"]
+    opcoes = ["🏠  Dashboard", "📋  Pontos Cadastrados", "📷  Cadastrar Fotos", "📲  Importar SD"]
 else:
-    opcoes = ["📋  Pontos Cadastrados", "📷  Cadastrar Fotos"]
+    opcoes = ["📋  Pontos Cadastrados", "📷  Cadastrar Fotos", "📲  Importar SD"]
 
 pagina = st.sidebar.radio(
     "Página",
@@ -616,7 +616,11 @@ if pagina == "Dashboard":
                          f"<b>Sentido:</b> {row['Sentido']}")
                 folium.CircleMarker(
                     location=[row["Latitude"], row["Longitude"]],
-                    radius=6, color=cor, fill=True, fill_opacity=0.85,
+                    radius=3,
+                    color=cor,
+                    fill=True,
+                    fill_opacity=0.9,
+                    weight=1,
                     popup=folium.Popup(popup, max_width=260)
                 ).add_to(mapa)
             st_folium(mapa, width=None, height=520, use_container_width=True)
@@ -1139,8 +1143,39 @@ elif pagina == "Cadastrar Fotos":
                     arq = fotos_dict[nome_foto]
                     arq.seek(0)
                     img_full = Image.open(arq)
-                    st.image(img_full, caption="Foto completa", use_column_width=True)
-                    st.image(recortar_legenda(img_full), caption="🔍 Recorte OCR", use_column_width=True)
+
+                    # Tabs para organizar as 3 visões
+                    tab1, tab2, tab3 = st.tabs(["📷 Completa", "🔍 Legenda OCR", "🔎 Zoom Trena"])
+
+                    with tab1:
+                        st.image(img_full, caption="Foto completa", use_column_width=True)
+
+                    with tab2:
+                        st.image(recortar_legenda(img_full), caption="Recorte OCR", use_column_width=True)
+
+                    with tab3:
+                        # Zoom automático na região da trena (centro-direita da foto)
+                        # onde normalmente fica a fita métrica
+                        larg, alt = img_full.size
+                        # Crop centro vertical, terço direito horizontal
+                        zoom_trena = img_full.crop((
+                            int(larg * 0.25),  # começa em 25% da largura
+                            int(alt  * 0.15),  # começa em 15% da altura
+                            int(larg * 0.80),  # vai até 80% da largura
+                            int(alt  * 0.85),  # vai até 85% da altura
+                        ))
+                        st.image(zoom_trena, caption="🔎 Zoom na trena — leia o valor e informe abaixo", use_column_width=True)
+                        st.markdown(
+                            f"""<div style="background:#1a2535; border-radius:8px; padding:10px;
+                                          border:1px solid #F5A623; text-align:center; margin-top:6px;">
+                                <span style="color:#F5A623; font-size:0.7rem; font-weight:700; 
+                                             letter-spacing:1px;">DEGRAU LIDO NA TRENA</span><br>
+                                <span style="color:#fff; font-size:2rem; font-weight:900;">
+                                    {row_foto.get('Degrau', '—')} mm
+                                </span>
+                            </div>""",
+                            unsafe_allow_html=True
+                        )
                 else:
                     st.info("Foto não disponível.")
 
@@ -1187,3 +1222,117 @@ elif pagina == "Cadastrar Fotos":
                         st.error(f"Erro ao salvar: {e}")
 
     st.markdown('<div class="vr-footer">Sistema de Inventário · Sistema de Inventário de Degraus</div>', unsafe_allow_html=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# PÁGINA: IMPORTAR SD
+# ═══════════════════════════════════════════════════════════════
+
+elif pagina == "Importar SD":
+
+    _header("📲", "Importar do SD", "Importe leituras coletadas offline pela régua inteligente")
+
+    st.markdown("""
+    <div style="background:#1a2535; border-radius:10px; padding:16px; margin-bottom:20px;
+                border-left:4px solid #F5A623; font-size:0.9rem; line-height:1.6;">
+        <b>Como usar:</b><br>
+        1. Conecte o celular/notebook no WiFi <b>Regua-Degraus</b> (senha: <b>regua1234</b>)<br>
+        2. Acesse <b>http://192.168.4.1</b> para ver a interface da régua<br>
+        3. Após a coleta, remova o cartão SD e copie o arquivo <b>leituras.json</b><br>
+        4. Faça upload do arquivo abaixo para importar para o banco
+    </div>
+    """, unsafe_allow_html=True)
+
+    arquivo_sd = st.file_uploader(
+        "Selecione o arquivo leituras.json do cartão SD",
+        type=["json"],
+        key="upload_sd"
+    )
+
+    if arquivo_sd:
+        try:
+            import json as json_lib
+            conteudo = arquivo_sd.read().decode("utf-8")
+            linhas = [l.strip() for l in conteudo.splitlines() if l.strip()]
+            registros = [json_lib.loads(l) for l in linhas]
+
+            df_sd = pd.DataFrame(registros)
+            df_sd = df_sd.rename(columns={
+                "degrau_mm": "Degrau (mm)",
+                "latitude":  "Latitude",
+                "longitude": "Longitude",
+                "hdop":      "HDOP",
+                "satelites": "Satélites",
+                "data_hora": "Data/Hora"
+            })
+
+            # Métricas
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("📋 Registros",      len(df_sd))
+            m2.metric("📏 Degrau Médio",   f"{df_sd['Degrau (mm)'].mean():.1f} mm")
+            m3.metric("⚠️ Degrau Máximo",  f"{df_sd['Degrau (mm)'].max():.1f} mm")
+            m4.metric("🔴 Críticos >30mm", int((df_sd["Degrau (mm)"] > 30).sum()))
+
+            st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
+            _section("📄 Registros importados")
+
+            st.dataframe(
+                df_sd[["Data/Hora", "Degrau (mm)", "Latitude", "Longitude", "HDOP", "Satélites"]],
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Degrau (mm)": st.column_config.NumberColumn(format="%.1f mm"),
+                    "Latitude":    st.column_config.NumberColumn(format="%.8f"),
+                    "Longitude":   st.column_config.NumberColumn(format="%.8f"),
+                    "HDOP":        st.column_config.NumberColumn(format="%.1f"),
+                }
+            )
+
+            st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
+
+            if st.button("💾 Salvar todos no banco", use_container_width=False):
+                try:
+                    con, tipo = get_conn()
+                    cur = con.cursor()
+                    ph = "%s" if tipo == "pg" else "?"
+                    salvos = 0
+                    for _, row in df_sd.iterrows():
+                        # Calcular KM real e rodovia via GPS
+                        lat = row.get("Latitude")
+                        lon = row.get("Longitude")
+                        rodovia = None
+                        km_real = None
+                        try:
+                            rodovia = descobrir_rodovia(lat, lon)
+                            km_real = calcular_km_real(rodovia, lat, lon)
+                        except Exception:
+                            pass
+
+                        cur.execute(
+                            f"INSERT INTO fotos (arquivo,rodovia,km_real,sentido,latitude,longitude,degrau,data,ocr_bruto) VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})",
+                            (
+                                f"SD_{row.get('Data/Hora','').replace('/','').replace(' ','_').replace(':','')}",
+                                rodovia,
+                                km_real,
+                                None,
+                                lat,
+                                lon,
+                                row.get("Degrau (mm)"),
+                                row.get("Data/Hora"),
+                                f"Importado SD · HDOP:{row.get('HDOP','?')} · {row.get('Satélites','?')} satélites"
+                            )
+                        )
+                        salvos += 1
+
+                    con.commit()
+                    con.close()
+                    carregar_dados.clear()
+                    st.success(f"✅ {salvos} registros salvos no banco!")
+
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+
+        except Exception as e:
+            st.error(f"Erro ao ler arquivo: {e}")
+
+    st.markdown('<div class="vr-footer">Sistema de Inventário de Degraus · Todos os direitos reservados</div>', unsafe_allow_html=True)
