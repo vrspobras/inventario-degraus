@@ -1002,17 +1002,78 @@ elif pagina == "Cadastrar Fotos":
         m = re.search(r'(\d{2}/\d{2}/\d{4})', texto)
         return m.group(1) if m else None
 
+    def utm_para_dd(zona_num, zona_letra, easting, northing):
+        """Converte coordenadas UTM para graus decimais."""
+        import math
+        # Constantes WGS84
+        a  = 6378137.0
+        f  = 1 / 298.257223563
+        b  = a * (1 - f)
+        e2 = 1 - (b/a)**2
+        e  = math.sqrt(e2)
+        k0 = 0.9996
+
+        # Hemisfério
+        hemisferio_sul = zona_letra.upper() < 'N'
+        if hemisferio_sul:
+            northing = northing - 10000000.0
+
+        x = easting - 500000.0
+        meridiano_central = (zona_num - 1) * 6 - 180 + 3
+
+        M  = northing / k0
+        mu = M / (a * (1 - e2/4 - 3*e2**2/64 - 5*e2**3/256))
+
+        e1  = (1 - math.sqrt(1 - e2)) / (1 + math.sqrt(1 - e2))
+        phi = (mu + (3*e1/2 - 27*e1**3/32)*math.sin(2*mu)
+                  + (21*e1**2/16 - 55*e1**4/32)*math.sin(4*mu)
+                  + (151*e1**3/96)*math.sin(6*mu)
+                  + (1097*e1**4/512)*math.sin(8*mu))
+
+        N1   = a / math.sqrt(1 - e2*math.sin(phi)**2)
+        T1   = math.tan(phi)**2
+        C1   = e2/(1-e2) * math.cos(phi)**2
+        R1   = a*(1-e2) / (1 - e2*math.sin(phi)**2)**1.5
+        D    = x / (N1*k0)
+
+        lat = phi - (N1*math.tan(phi)/R1) * (
+            D**2/2 - (5 + 3*T1 + 10*C1 - 4*C1**2 - 9*e2/(1-e2))*D**4/24
+            + (61 + 90*T1 + 298*C1 + 45*T1**2 - 252*e2/(1-e2) - 3*C1**2)*D**6/720
+        )
+        lon = (D - (1 + 2*T1 + C1)*D**3/6
+                 + (5 - 2*C1 + 28*T1 - 3*C1**2 + 8*e2/(1-e2) + 24*T1**2)*D**5/120
+              ) / math.cos(phi)
+
+        lat_dd = math.degrees(lat)
+        lon_dd = math.degrees(lon) + meridiano_central
+
+        return round(lat_dd, 8), round(lon_dd, 8)
+
     def extrair_coordenadas(texto):
         """
         Aceita todos os formatos:
           -23.289552 -49.157809          (sinal negativo)
           23.289552S 49.157809W          (letra S/W)
-          23.289552S 49.157809E          (letra E para longitude leste — raro mas possível)
+          22K 696581 7419224             (UTM)
           23°17'22"S 49°09'28"W          (graus/minutos/segundos)
         Sempre retorna (lat_negativa, lon_negativa) para Brasil
         """
         # Corrigir erros típicos do Tesseract
         texto = texto.replace(",", ".").replace("O", "0").replace("l", "1")
+
+        # ── Padrão UTM: 22K 696581 7419224 ────────────────────────────────────
+        m = re.search(r'(\d{1,2})([A-Za-z])\s+(\d{6,7})\s+(\d{6,7})', texto)
+        if m:
+            zona_num    = int(m.group(1))
+            zona_letra  = m.group(2)
+            easting     = float(m.group(3))
+            northing    = float(m.group(4))
+            # Validar faixas UTM Brasil
+            if 18 <= zona_num <= 25 and 100000 <= easting <= 900000:
+                try:
+                    return utm_para_dd(zona_num, zona_letra, easting, northing)
+                except Exception:
+                    pass
 
         # ── Padrão 1: sinal negativo  -XX.XXXX -YY.XXXX ──────────────────────
         # Captura TODAS as casas decimais presentes na foto
