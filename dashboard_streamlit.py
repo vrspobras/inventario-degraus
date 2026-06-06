@@ -918,6 +918,38 @@ elif pagina == "Cadastrar Fotos":
         largura, altura = img.size
         return img.crop((int(largura * 0.45), int(altura * 0.58), largura, altura))
 
+    def ler_degrau_claude(img_pil):
+        """Lê o degrau na interseção da borda inferior da régua metálica com a trena."""
+        import anthropic, io
+        buf = io.BytesIO()
+        img_pil.save(buf, format="JPEG", quality=85)
+        img_b64 = base64.b64encode(buf.getvalue()).decode()
+        client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        resp = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=20,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
+                    {"type": "text", "text": (
+                        "Nesta foto há uma régua metálica horizontal (barra de alumínio) "
+                        "apoiada sobre um degrau no pavimento, e uma trena vertical amarela. "
+                        "A trena começa do zero na base (chão mais baixo) e sobe verticalmente. "
+                        "Leia o valor exato em milímetros onde a BORDA INFERIOR da régua metálica "
+                        "cruza a escala da trena — esse é o valor do degrau. "
+                        "Ignore a base da trena. Foque apenas na intersecção da borda de baixo "
+                        "da barra de alumínio com a fita métrica. "
+                        "Retorne SOMENTE o número em mm, sem texto, sem unidade."
+                    )}
+                ]
+            }]
+        )
+        try:
+            return float(resp.content[0].text.strip().replace("mm","").replace(",","."))
+        except Exception:
+            return None
+
     def ocr_claude(img_pil):
         """Extrai texto da legenda usando Claude Haiku — rápido e preciso."""
         import anthropic, io
