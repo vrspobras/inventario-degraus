@@ -933,14 +933,15 @@ elif pagina == "Cadastrar Fotos":
                 "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_b64}},
                     {"type": "text", "text": (
-                        "Nesta foto há uma régua metálica horizontal (barra de alumínio) "
-                        "apoiada sobre um degrau no pavimento, e uma trena vertical amarela. "
-                        "A trena começa do zero na base (chão mais baixo) e sobe verticalmente. "
-                        "Leia o valor exato em milímetros onde a BORDA INFERIOR da régua metálica "
-                        "cruza a escala da trena — esse é o valor do degrau. "
-                        "Ignore a base da trena. Foque apenas na intersecção da borda de baixo "
-                        "da barra de alumínio com a fita métrica. "
-                        "Retorne SOMENTE o número em mm, sem texto, sem unidade."
+                        "Nesta foto há uma régua metálica horizontal (barra de alumínio brilhante) "
+                        "e uma trena vertical amarela. "
+                        "A trena tem duas escalas: use APENAS a escala em CM (lado esquerdo da fita). "
+                        "A base da trena (zero) está no chão mais baixo. "
+                        "Localize a BORDA INFERIOR da régua de alumínio — a linha onde termina o metal brilhante. "
+                        "Leia o valor em CM onde essa borda inferior cruza a escala CM da trena. "
+                        "Converta para MM multiplicando por 10. "
+                        "Exemplo: se a borda inferior está na marca 4.2 CM, retorne 42. "
+                        "Retorne SOMENTE o número inteiro em mm, sem texto."
                     )}
                 ]
             }]
