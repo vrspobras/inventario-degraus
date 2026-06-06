@@ -1080,14 +1080,13 @@ elif pagina == "Cadastrar Fotos":
             try:
                 img         = Image.open(foto)
                 # Envia foto inteira para o Gemini — ele localiza a legenda sozinho
-                texto       = ocr_claude(img)
-                lat, lon    = extrair_coordenadas(texto)
-                degrau_auto = ler_degrau_claude(img)
+                texto    = ocr_claude(img)
+                lat, lon = extrair_coordenadas(texto)
                 dados.append({
                     "Arquivo": foto.name, "Rodovia": extrair_rodovia(texto),
                     "Sentido": extrair_sentido(texto), "Latitude": lat,
                     "Longitude": lon, "Data": extrair_data(texto),
-                    "Degrau": degrau_auto, "KM Real": None, "OCR Bruto": texto
+                    "Degrau": None, "KM Real": None, "OCR Bruto": texto
                 })
             except Exception as e:
                 dados.append({
