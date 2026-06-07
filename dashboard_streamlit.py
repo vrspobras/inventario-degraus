@@ -12,6 +12,26 @@ import re
 import sqlite3
 
 from streamlit_folium import st_folium
+import threading
+import urllib.request
+import time
+
+def _keep_alive():
+    """Faz ping no próprio app a cada 10 minutos para evitar sleep no Render."""
+    url = os.environ.get("RENDER_EXTERNAL_URL", "")
+    if not url:
+        return
+    def ping():
+        while True:
+            try:
+                urllib.request.urlopen(url, timeout=10)
+            except Exception:
+                pass
+            time.sleep(600)  # 10 minutos
+    t = threading.Thread(target=ping, daemon=True)
+    t.start()
+
+_keep_alive()
 
 # ═══════════════════════════════════════════════════════════════════
 # IDENTIDADE VISUAL — Sistema de Inventário
@@ -753,12 +773,13 @@ elif pagina == "Pontos Cadastrados":
         st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
 
         # Estado da página
-        if "pts_linha" not in st.session_state: st.session_state["pts_linha"] = 0
-        if "pts_df"    not in st.session_state or len(st.session_state["pts_df"]) != len(df_pts):
-            st.session_state["pts_df"]    = df_pts.copy()
+        if "pts_linha" not in st.session_state:
             st.session_state["pts_linha"] = 0
         if "pts_confirmar_exclusao" not in st.session_state:
             st.session_state["pts_confirmar_exclusao"] = False
+        if "pts_df" not in st.session_state or len(st.session_state["pts_df"]) != len(df_pts):
+            st.session_state["pts_df"]    = df_pts.copy()
+            st.session_state["pts_linha"] = 0
 
         pts_df = st.session_state["pts_df"]
         colunas_exibir = ["Arquivo", "Rodovia", "KM Real", "Sentido", "Degrau (mm)", "Latitude", "Longitude", "Data"]
@@ -766,54 +787,46 @@ elif pagina == "Pontos Cadastrados":
         col_tab, col_img = st.columns([2, 1])
 
         with col_tab:
-            _section("📄 Registros — clique para selecionar")
+            _section("📄 Registros — edite diretamente na tabela")
 
-            ev = st.dataframe(
-                pts_df[colunas_exibir].sort_values(["Rodovia", "KM Real"]),
-                use_container_width=True, hide_index=False,
-                on_select="rerun", selection_mode="single-row",
+            pts_editado = st.data_editor(
+                pts_df[colunas_exibir].sort_values(["Rodovia", "KM Real"]).reset_index(drop=True),
+                use_container_width=True,
+                num_rows="fixed",
                 key="pts_tabela_sel",
                 column_config={
+                    "Arquivo":     st.column_config.TextColumn("Arquivo"),
+                    "Rodovia":     st.column_config.TextColumn("Rodovia"),
                     "KM Real":     st.column_config.NumberColumn(format="%.3f"),
-                    "Degrau (mm)": st.column_config.NumberColumn(format="%.1f mm"),
-                    "Latitude":    st.column_config.NumberColumn(format="%.6f"),
-                    "Longitude":   st.column_config.NumberColumn(format="%.6f"),
+                    "Sentido":     st.column_config.SelectboxColumn(options=["Norte","Sul","Leste","Oeste"]),
+                    "Degrau (mm)": st.column_config.NumberColumn(format="%.1f mm", min_value=0.0, step=1.0),
+                    "Latitude":    st.column_config.NumberColumn(format="%.8f"),
+                    "Longitude":   st.column_config.NumberColumn(format="%.8f"),
+                    "Data":        st.column_config.TextColumn("Data"),
                 }
             )
 
-            sel = ev.selection.rows if ev.selection.rows else []
-            if sel:
-                st.session_state["pts_linha"] = sel[0]
-                st.session_state["pts_confirmar_exclusao"] = False
-
-            idx_ativo = min(st.session_state["pts_linha"], len(pts_df) - 1)
-            row_ativo = pts_df.iloc[idx_ativo]
-
-            st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
-            _section(f"✏️ Editando — {row_ativo['Arquivo']}")
-
-            ea, eb, ec = st.columns(3)
-            novo_lat    = ea.number_input("Latitude",    value=float(row_ativo["Latitude"])    if pd.notna(row_ativo["Latitude"])    else 0.0, format="%.6f", key="pts_lat")
-            novo_lon    = eb.number_input("Longitude",   value=float(row_ativo["Longitude"])   if pd.notna(row_ativo["Longitude"])   else 0.0, format="%.6f", key="pts_lon")
-            novo_degrau = ec.number_input("Degrau (mm)", value=float(row_ativo["Degrau (mm)"]) if pd.notna(row_ativo["Degrau (mm)"]) else 0.0, min_value=0.0, step=1.0, key="pts_deg")
+            idx_ativo = min(st.session_state.get("pts_linha", 0), max(0, len(pts_editado) - 1))
+            row_ativo = pts_editado.iloc[idx_ativo] if len(pts_editado) > 0 else pts_df.iloc[0]
 
             ba, bb, bc = st.columns(3)
 
-            if ba.button("✅ Aplicar edição", use_container_width=True, key="pts_aplicar"):
-                pts_df.at[idx_ativo, "Latitude"]    = novo_lat
-                pts_df.at[idx_ativo, "Longitude"]   = novo_lon
-                pts_df.at[idx_ativo, "Degrau (mm)"] = novo_degrau
-                st.session_state["pts_df"] = pts_df
-                st.success("Linha atualizada.")
+            if ba.button("✅ Aplicar edições", use_container_width=True, key="pts_aplicar"):
+                st.session_state["pts_df"] = pts_editado.copy()
+                st.success("Edições aplicadas.")
                 st.rerun()
 
             if bb.button("💾 Salvar no banco", use_container_width=True, key="pts_salvar"):
                 try:
-                    con = sqlite3.connect("banco.db")
-                    for _, r in pts_df.iterrows():
-                        con.execute(
-                            "UPDATE fotos SET latitude=?, longitude=?, degrau=? WHERE arquivo=?",
-                            (r["Latitude"], r["Longitude"], r["Degrau (mm)"], r["Arquivo"])
+                    con, tipo = get_conn()
+                    cur = con.cursor()
+                    ph = "%s" if tipo == "pg" else "?"
+                    for _, r in pts_editado.iterrows():
+                        cur.execute(
+                            f"UPDATE fotos SET rodovia={ph}, km_real={ph}, sentido={ph}, latitude={ph}, longitude={ph}, degrau={ph}, data={ph} WHERE arquivo={ph}",
+                            (r.get("Rodovia"), r.get("KM Real"), r.get("Sentido"),
+                             r.get("Latitude"), r.get("Longitude"), r.get("Degrau (mm)"),
+                             r.get("Data"), r.get("Arquivo"))
                         )
                     con.commit(); con.close()
                     carregar_dados.clear()
