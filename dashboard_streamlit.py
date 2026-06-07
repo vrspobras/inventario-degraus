@@ -12,26 +12,6 @@ import re
 import sqlite3
 
 from streamlit_folium import st_folium
-import threading
-import urllib.request
-import time
-
-def _keep_alive():
-    """Faz ping no próprio app a cada 10 minutos para evitar sleep no Render."""
-    url = os.environ.get("RENDER_EXTERNAL_URL", "")
-    if not url:
-        return
-    def ping():
-        while True:
-            try:
-                urllib.request.urlopen(url, timeout=10)
-            except Exception:
-                pass
-            time.sleep(600)  # 10 minutos
-    t = threading.Thread(target=ping, daemon=True)
-    t.start()
-
-_keep_alive()
 
 # ═══════════════════════════════════════════════════════════════════
 # IDENTIDADE VISUAL — Sistema de Inventário
