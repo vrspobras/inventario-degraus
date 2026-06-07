@@ -387,6 +387,11 @@ pagina = st.sidebar.radio(
 )
 pagina = pagina.split("  ")[-1].strip()  # extrai nome limpo
 
+# Garantir que página atual existe no menu (evita "Page not found")
+paginas_validas = [o.split("  ")[-1].strip() for o in opcoes]
+if pagina not in paginas_validas:
+    pagina = paginas_validas[0]
+
 # ═══════════════════════════════════════════════════════════════════
 # KMZ
 # ═══════════════════════════════════════════════════════════════════
