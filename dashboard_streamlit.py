@@ -52,35 +52,30 @@ USUARIOS = {
 
 CSS_LOGIN = f"""
 <style>
-.login-wrapper {{
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 85vh;
-}}
+body, .stApp {{ background: #f0f4fb !important; }}
 .login-card {{
     background: {BRANCO};
     border-radius: 16px;
     box-shadow: 0 8px 40px rgba(27,58,140,0.18);
-    padding: 48px 52px 40px 52px;
+    padding: 36px 40px 32px 40px;
     width: 100%;
-    max-width: 420px;
     border-top: 6px solid {OURO};
+    margin: 0 auto;
 }}
 .login-logo {{
     text-align: center;
-    margin-bottom: 28px;
+    margin-bottom: 20px;
 }}
 .login-logo h2 {{
     color: {AZUL};
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     font-weight: 800;
-    margin: 12px 0 4px 0;
+    margin: 10px 0 4px 0;
     letter-spacing: 0.5px;
 }}
 .login-logo p {{
     color: #8a94b2;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     margin: 0;
     letter-spacing: 1px;
     text-transform: uppercase;
@@ -88,8 +83,12 @@ CSS_LOGIN = f"""
 .login-footer {{
     text-align: center;
     color: #b0b8d0;
-    font-size: 0.72rem;
-    margin-top: 28px;
+    font-size: 0.7rem;
+    margin-top: 20px;
+}}
+.stApp input {{
+    color: #122970 !important;
+    background: #FFFFFF !important;
 }}
 </style>
 """
@@ -99,7 +98,7 @@ def tela_login():
     # esconder sidebar na tela de login
     st.markdown("<style>[data-testid='stSidebar']{display:none}</style>", unsafe_allow_html=True)
 
-    col_l, col_c, col_r = st.columns([1, 1.4, 1])
+    col_l, col_c, col_r = st.columns([0.3, 2, 0.3])
     with col_c:
         st.markdown('''<div class="login-card">''', unsafe_allow_html=True)
 
@@ -273,11 +272,36 @@ CSS = f"""
 .stNumberInput input, .stTextInput input, .stSelectbox select {{
     border-radius: 6px;
     border: 1.5px solid #c5cde8;
+    color: #122970 !important;
+    background-color: #FFFFFF !important;
 }}
 .stNumberInput input:focus, .stTextInput input:focus {{
-    border-color: {AZUL};
+    border-color: #1B3A8C;
     box-shadow: 0 0 0 2px rgba(27,58,140,0.15);
 }}
+/* Todos inputs com fonte escura */
+input, textarea, select,
+[data-baseweb="input"] input,
+[data-baseweb="select"] div,
+[data-baseweb="textarea"] textarea,
+[data-testid="stMultiSelect"] span,
+[data-testid="stNumberInput"] input,
+[data-testid="stTextInput"] input {{
+    color: #122970 !important;
+    background-color: #FFFFFF !important;
+}}
+/* Dropdown options */
+[data-baseweb="popover"] li,
+[data-baseweb="menu"] li {{
+    color: #122970 !important;
+    background-color: #FFFFFF !important;
+}}
+[data-baseweb="popover"] li:hover {{
+    background-color: #e8edf8 !important;
+}}
+/* Labels fora da sidebar */
+.stApp [data-testid="stWidgetLabel"] p,
+.stApp label {{ color: #122970 !important; }}
 
 /* ── Divider personalizado ── */
 .vr-divider {{
@@ -801,59 +825,50 @@ elif pagina == "Pontos Cadastrados":
                 st.success("Edições aplicadas.")
                 st.rerun()
 
-            if bb.button("💾 Salvar no banco", use_container_width=True, key="pts_salvar"):
-                try:
-                    con, tipo = get_conn()
-                    cur = con.cursor()
-                    ph = "%s" if tipo == "pg" else "?"
-                    for _, r in pts_editado.iterrows():
-                        cur.execute(
-                            f"UPDATE fotos SET rodovia={ph}, km_real={ph}, sentido={ph}, latitude={ph}, longitude={ph}, degrau={ph}, data={ph} WHERE arquivo={ph}",
-                            (r.get("Rodovia"), r.get("KM Real"), r.get("Sentido"),
-                             r.get("Latitude"), r.get("Longitude"), r.get("Degrau (mm)"),
-                             r.get("Data"), r.get("Arquivo"))
-                        )
-                    con.commit(); con.close()
-                    carregar_dados.clear()
-                    st.success("Alterações salvas!")
-                    st.session_state.pop("pts_df", None)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro: {e}")
 
-            # ── Botão Apagar com confirmação ───────────────────────────────────
-            with bc:
-                if not st.session_state["pts_confirmar_exclusao"]:
+            # Seletor de linha para excluir
+            st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
+            _section("🗑️ Excluir registro")
+
+            nomes_disponiveis = pts_editado["Arquivo"].tolist()
+            arquivo_excluir = st.selectbox(
+                "Selecione o registro para excluir:",
+                options=nomes_disponiveis,
+                key="pts_sel_excluir"
+            )
+
+            if not st.session_state.get("pts_confirmar_exclusao", False):
+                st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
+                if st.button("🗑️ Apagar registro selecionado", use_container_width=True, key="pts_apagar_btn"):
+                    st.session_state["pts_confirmar_exclusao"] = True
+                    st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.warning(f"⚠️ Confirma exclusão de **{arquivo_excluir}**?")
+                col_sim, col_nao = st.columns(2)
+                with col_sim:
                     st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
-                    if st.button("🗑️ Apagar registro", use_container_width=True, key="pts_apagar_btn"):
-                        st.session_state["pts_confirmar_exclusao"] = True
-                        st.rerun()
-                    st.markdown('</div>', unsafe_allow_html=True)
-                else:
-                    st.warning(f"⚠️ Confirma exclusão de **{row_ativo['Arquivo']}**?")
-                    c_sim, c_nao = st.columns(2)
-                    with c_sim:
-                        st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
-                        if st.button("✔️ Sim, apagar", use_container_width=True, key="pts_confirmar_sim"):
-                            try:
-                                con, tipo = get_conn()
-                                cur = con.cursor()
-                                ph = "%s" if tipo == "pg" else "?"
-                                cur.execute(f"DELETE FROM fotos WHERE arquivo = {ph}", (row_ativo["Arquivo"],))
-                                con.commit(); con.close()
-                                carregar_dados.clear()
-                                st.session_state.pop("pts_df", None)
-                                st.session_state["pts_linha"] = 0
-                                st.session_state["pts_confirmar_exclusao"] = False
-                                st.success("Registro apagado.")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro: {e}")
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    with c_nao:
-                        if st.button("✖️ Cancelar", use_container_width=True, key="pts_confirmar_nao"):
+                    if st.button("✔️ Sim, apagar", use_container_width=True, key="pts_confirmar_sim"):
+                        try:
+                            con, tipo = get_conn()
+                            cur = con.cursor()
+                            ph = "%s" if tipo == "pg" else "?"
+                            cur.execute(f"DELETE FROM fotos WHERE arquivo = {ph}", (arquivo_excluir,))
+                            con.commit(); con.close()
+                            carregar_dados.clear()
+                            st.session_state.pop("pts_df", None)
+                            st.session_state["pts_linha"] = 0
                             st.session_state["pts_confirmar_exclusao"] = False
+                            st.success("Registro apagado.")
                             st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro: {e}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+                with col_nao:
+                    if st.button("✖️ Cancelar", use_container_width=True, key="pts_confirmar_nao"):
+                        st.session_state["pts_confirmar_exclusao"] = False
+                        st.rerun()
+
 
         # ── Foto à direita ─────────────────────────────────────────────────────
         with col_img:
