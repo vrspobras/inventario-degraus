@@ -98,50 +98,58 @@ def tela_login():
     # esconder sidebar na tela de login
     st.markdown("<style>[data-testid='stSidebar']{display:none}</style>", unsafe_allow_html=True)
 
-    col_l, col_c, col_r = st.columns([0.3, 2, 0.3])
+    col_l, col_c, col_r = st.columns([1, 2, 1])
     with col_c:
-        st.markdown('''<div class="login-card">''', unsafe_allow_html=True)
-
-        # Logo / cabeçalho
+        # Logo / cabeçalho inline sem div externa (evita corte)
         logo_path = "logo.png"
         if os.path.exists(logo_path):
             with open(logo_path, "rb") as f:
                 logo_b64 = base64.b64encode(f.read()).decode()
             st.markdown(
-                f'''<div class="login-logo">
-                    <img src="data:image/png;base64,{logo_b64}" style="width:140px;">
-                    <p>Inventário de Degraus</p>
+                f'''<div style="text-align:center; margin-bottom:16px;">
+                    <img src="data:image/png;base64,{logo_b64}"
+                         style="width:180px; max-width:100%;">
                 </div>''',
                 unsafe_allow_html=True
             )
         else:
             st.markdown(
-                f'''<div class="login-logo">
+                f'''<div style="text-align:center; margin-bottom:16px;">
                     <span style="font-size:3rem;">🛣️</span>
-                    <h2>Sistema de Inventário</h2>
-                    <p>Inventário de Degraus</p>
+                    <h2 style="color:{AZUL}; margin:8px 0 4px;">Sistema de Inventário</h2>
                 </div>''',
                 unsafe_allow_html=True
             )
 
-        usuario = st.text_input("Usuário", placeholder="Digite seu usuário", key="login_user")
-        senha   = st.text_input("Senha",   placeholder="Digite sua senha",   key="login_pass", type="password")
-
-        if st.button("Entrar →", use_container_width=True, key="login_btn"):
-            if usuario in USUARIOS and USUARIOS[usuario]["senha"] == _hash(senha):
-                st.session_state["logado"]  = True
-                st.session_state["usuario"] = usuario
-                st.session_state["nome"]    = USUARIOS[usuario]["nome"]
-                st.session_state["perfil"]  = USUARIOS[usuario]["perfil"]
-                st.rerun()
-            else:
-                st.error("Usuário ou senha incorretos.")
-
         st.markdown(
-            '<div class="login-footer">© Sistema de Inventário · Acesso restrito</div>',
+            f'''<div style="text-align:center; margin-bottom:24px;">
+                <span style="color:{AZUL}; font-size:1.1rem; font-weight:800;
+                             letter-spacing:0.5px;">INVENTÁRIO DE DEGRAUS</span><br>
+                <span style="color:#8a94b2; font-size:0.78rem; letter-spacing:1px;
+                             text-transform:uppercase;">Acesso restrito</span>
+            </div>''',
             unsafe_allow_html=True
         )
-        st.markdown('</div>', unsafe_allow_html=True)
+
+        with st.container():
+            usuario = st.text_input("Usuário", placeholder="Digite seu usuário", key="login_user")
+            senha   = st.text_input("Senha",   placeholder="Digite sua senha",   key="login_pass", type="password")
+
+            if st.button("Entrar →", use_container_width=True, key="login_btn"):
+                if usuario in USUARIOS and USUARIOS[usuario]["senha"] == _hash(senha):
+                    st.session_state["logado"]  = True
+                    st.session_state["usuario"] = usuario
+                    st.session_state["nome"]    = USUARIOS[usuario]["nome"]
+                    st.session_state["perfil"]  = USUARIOS[usuario]["perfil"]
+                    st.rerun()
+                else:
+                    st.error("Usuário ou senha incorretos.")
+
+        st.markdown(
+            '<p style="text-align:center; color:#b0b8d0; font-size:0.72rem; margin-top:16px;">' +
+            '© Sistema de Inventário · Acesso restrito</p>',
+            unsafe_allow_html=True
+        )
 
 # ═══════════════════════════════════════════════════════════════════
 # CONTROLE DE SESSÃO
@@ -268,7 +276,7 @@ CSS = f"""
     box-shadow: 0 2px 8px rgba(27,58,140,0.06);
 }}
 
-/* ── Inputs ── */
+/* ── Inputs gerais ── */
 .stNumberInput input, .stTextInput input, .stSelectbox select {{
     border-radius: 6px;
     border: 1.5px solid #c5cde8;
@@ -279,29 +287,75 @@ CSS = f"""
     border-color: #1B3A8C;
     box-shadow: 0 0 0 2px rgba(27,58,140,0.15);
 }}
-/* Todos inputs com fonte escura */
-input, textarea, select,
+
+/* ── Fonte escura em TODOS os inputs, selects e multiselects ── */
+input, textarea, select {{
+    color: #122970 !important;
+    background-color: #FFFFFF !important;
+}}
 [data-baseweb="input"] input,
-[data-baseweb="select"] div,
-[data-baseweb="textarea"] textarea,
+[data-baseweb="input"] textarea,
+[data-baseweb="select"] input,
+[data-baseweb="select"] > div,
+[data-baseweb="select"] span,
+[data-baseweb="textarea"] textarea {{
+    color: #122970 !important;
+    background-color: #FFFFFF !important;
+}}
+
+/* ── Multiselect — tags e texto digitado ── */
 [data-testid="stMultiSelect"] span,
-[data-testid="stNumberInput"] input,
-[data-testid="stTextInput"] input {{
+[data-testid="stMultiSelect"] input,
+[data-testid="stMultiSelect"] div[data-baseweb="tag"] span,
+[data-testid="stMultiSelect"] [data-baseweb="input"] {{
     color: #122970 !important;
     background-color: #FFFFFF !important;
 }}
-/* Dropdown options */
+[data-testid="stMultiSelect"] [data-baseweb="select"] > div:first-child {{
+    background-color: #FFFFFF !important;
+    border-color: #c5cde8 !important;
+}}
+
+/* ── Selectbox ── */
+[data-testid="stSelectbox"] [data-baseweb="select"] > div,
+[data-testid="stSelectbox"] div[role="combobox"] {{
+    color: #122970 !important;
+    background-color: #FFFFFF !important;
+}}
+
+/* ── Dropdown options (lista aberta) ── */
 [data-baseweb="popover"] li,
-[data-baseweb="menu"] li {{
+[data-baseweb="popover"] [role="option"],
+[data-baseweb="menu"] li,
+ul[role="listbox"] li {{
     color: #122970 !important;
     background-color: #FFFFFF !important;
 }}
-[data-baseweb="popover"] li:hover {{
+[data-baseweb="popover"] li:hover,
+ul[role="listbox"] li:hover {{
     background-color: #e8edf8 !important;
+    color: {AZUL_DARK} !important;
 }}
-/* Labels fora da sidebar */
+
+/* ── Number input ── */
+[data-testid="stNumberInput"] input {{
+    color: #122970 !important;
+    background-color: #FFFFFF !important;
+}}
+
+/* ── Labels fora da sidebar ── */
 .stApp [data-testid="stWidgetLabel"] p,
-.stApp label {{ color: #122970 !important; }}
+.stApp label,
+.stApp .stMarkdown p {{
+    color: #122970 !important;
+}}
+
+/* ── Garantir que sidebar sobrescreve labels brancos ── */
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .stMarkdown p {{
+    color: {BRANCO} !important;
+}}
 
 /* ── Divider personalizado ── */
 .vr-divider {{
