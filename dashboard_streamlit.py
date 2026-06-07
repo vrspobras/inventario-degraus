@@ -356,9 +356,9 @@ st.sidebar.markdown(
 )
 # Admin vê tudo; operador não vê o Dashboard completo
 if st.session_state["perfil"] == "admin":
-    opcoes = ["🏠  Dashboard", "📋  Pontos Cadastrados", "📷  Cadastrar Fotos", "📲  Importar SD"]
+    opcoes = ["🏠  Dashboard", "📋  Pontos Cadastrados", "📷  Cadastrar Fotos", "📦  Upload em Massa", "📲  Importar SD"]
 else:
-    opcoes = ["📋  Pontos Cadastrados", "📷  Cadastrar Fotos", "📲  Importar SD"]
+    opcoes = ["📋  Pontos Cadastrados", "📷  Cadastrar Fotos", "📦  Upload em Massa", "📲  Importar SD"]
 
 pagina = st.sidebar.radio(
     "Página",
@@ -1428,5 +1428,221 @@ elif pagina == "Importar SD":
 
         except Exception as e:
             st.error(f"Erro ao ler arquivo: {e}")
+
+    st.markdown('<div class="vr-footer">Sistema de Inventário de Degraus · Todos os direitos reservados</div>', unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════
+# PÁGINA: UPLOAD EM MASSA
+# ═══════════════════════════════════════════════════════════════════
+
+elif pagina == "Upload em Massa":
+
+    from PIL import Image
+
+    _header("📦", "Upload em Massa", "Processe e salve centenas de fotos de uma vez")
+
+    st.markdown("""
+    <div style="background:#1a2535; border-radius:10px; padding:16px; margin-bottom:20px;
+                border-left:4px solid #F5A623; font-size:0.9rem; line-height:1.8;">
+        <b>Como funciona:</b><br>
+        1. Selecione todas as fotos de uma vez<br>
+        2. O sistema processa automaticamente: OCR da legenda, coordenadas e KM<br>
+        3. Revise o resumo e clique em <b>Salvar Tudo</b><br>
+        4. Fotos com erro ficam marcadas para correção manual
+    </div>
+    """, unsafe_allow_html=True)
+
+    fotos_massa = st.file_uploader(
+        "Selecione as fotos (JPG/PNG) — sem limite de quantidade",
+        type=["jpg", "jpeg", "png"],
+        accept_multiple_files=True,
+        key="upload_massa"
+    )
+
+    if fotos_massa:
+        st.info(f"📸 {len(fotos_massa)} fotos selecionadas")
+
+        col_op1, col_op2 = st.columns(2)
+        ignorar_erros = col_op1.checkbox("Ignorar fotos com erro e continuar", value=True)
+        salvar_auto   = col_op2.checkbox("Salvar automaticamente ao terminar", value=False)
+
+        if st.button("▶️ Iniciar Processamento em Massa", use_container_width=True):
+            st.session_state["massa_fila"]      = list(range(len(fotos_massa)))
+            st.session_state["massa_dados"]     = []
+            st.session_state["massa_erros"]     = []
+            st.session_state["massa_total"]     = len(fotos_massa)
+            st.session_state["massa_processando"] = True
+            st.session_state["massa_salvar_auto"] = salvar_auto
+            st.rerun()
+
+    # ── Processamento incremental ──────────────────────────────────
+    if st.session_state.get("massa_processando") and st.session_state.get("massa_fila") and fotos_massa:
+
+        fila    = st.session_state["massa_fila"]
+        dados   = st.session_state["massa_dados"]
+        erros   = st.session_state["massa_erros"]
+        total   = st.session_state["massa_total"]
+        idx     = fila[0]
+        foto    = fotos_massa[idx]
+        feitos  = total - len(fila)
+
+        # Barra de progresso
+        prog = feitos / total
+        st.progress(prog)
+        st.markdown(
+            f"<div style='text-align:center; color:#F5A623; font-weight:700; margin-bottom:8px;'>"
+            f"Processando {feitos+1} de {total} — {foto.name}"
+            f"</div>",
+            unsafe_allow_html=True
+        )
+
+        # Métricas em tempo real
+        mc1, mc2, mc3 = st.columns(3)
+        mc1.metric("✅ Processados", feitos)
+        mc2.metric("❌ Erros",       len(erros))
+        mc3.metric("⏳ Restantes",   len(fila))
+
+        try:
+            img     = Image.open(foto)
+            texto   = ocr_claude(img)
+            lat, lon = extrair_coordenadas(texto)
+            rodovia  = extrair_rodovia(texto)
+            sentido  = extrair_sentido(texto)
+            data     = extrair_data(texto)
+
+            # Calcular KM automaticamente se coordenadas válidas
+            km_real = None
+            if lat and lon:
+                try:
+                    rod_calc = descobrir_rodovia(lat, lon)
+                    km_real  = calcular_km_real(rod_calc, lat, lon)
+                    if not rodovia:
+                        rodovia = rod_calc
+                except Exception:
+                    pass
+
+            dados.append({
+                "Arquivo":  foto.name,
+                "Rodovia":  rodovia,
+                "KM Real":  km_real,
+                "Sentido":  sentido,
+                "Latitude": lat,
+                "Longitude":lon,
+                "Degrau":   None,
+                "Data":     data,
+                "OCR Bruto":texto,
+                "Status":   "✅ OK" if lat and lon else "⚠️ Sem coordenada"
+            })
+
+        except Exception as e:
+            erros.append(foto.name)
+            dados.append({
+                "Arquivo":  foto.name,
+                "Rodovia":  None, "KM Real": None, "Sentido": None,
+                "Latitude": None, "Longitude": None, "Degrau": None,
+                "Data":     None, "OCR Bruto": str(e),
+                "Status":   f"❌ Erro: {str(e)[:50]}"
+            })
+
+        st.session_state["massa_dados"] = dados
+        st.session_state["massa_fila"]  = fila[1:]
+
+        if st.session_state["massa_fila"]:
+            st.rerun()
+        else:
+            st.session_state["massa_processando"] = False
+            st.success(f"✅ Processamento concluído! {total - len(erros)} OK · {len(erros)} erros")
+
+            # Salvar automaticamente se marcado
+            if st.session_state.get("massa_salvar_auto"):
+                st.session_state["massa_salvar_agora"] = True
+            st.rerun()
+
+    # ── Resultado + ações ──────────────────────────────────────────
+    if (not st.session_state.get("massa_processando") and
+            st.session_state.get("massa_dados") and
+            not st.session_state.get("massa_fila")):
+
+        dados  = st.session_state["massa_dados"]
+        df_res = pd.DataFrame(dados)
+
+        # Métricas finais
+        total   = len(df_res)
+        ok      = len(df_res[df_res["Status"].str.startswith("✅")])
+        sem_coord = len(df_res[df_res["Status"].str.startswith("⚠️")])
+        erros   = len(df_res[df_res["Status"].str.startswith("❌")])
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("📸 Total",        total)
+        m2.metric("✅ Com coord.",    ok)
+        m3.metric("⚠️ Sem coord.",   sem_coord)
+        m4.metric("❌ Erros",        erros)
+
+        st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
+        _section("📄 Resultado do processamento")
+
+        # Colorir status
+        st.dataframe(
+            df_res[["Arquivo", "Rodovia", "KM Real", "Sentido",
+                    "Latitude", "Longitude", "Data", "Status"]],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "KM Real":   st.column_config.NumberColumn(format="%.3f"),
+                "Latitude":  st.column_config.NumberColumn(format="%.8f"),
+                "Longitude": st.column_config.NumberColumn(format="%.8f"),
+                "Status":    st.column_config.TextColumn("Status"),
+            }
+        )
+
+        st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
+
+        # Filtro do que salvar
+        opcao_salvar = st.radio(
+            "O que salvar no banco?",
+            ["Apenas com coordenadas válidas", "Todos (incluindo erros)"],
+            horizontal=True
+        )
+
+        ba, bb = st.columns(2)
+
+        if ba.button("💾 Salvar no Banco", use_container_width=True):
+            if opcao_salvar == "Apenas com coordenadas válidas":
+                df_salvar = df_res[df_res["Latitude"].notna() & df_res["Longitude"].notna()]
+            else:
+                df_salvar = df_res
+
+            try:
+                con, tipo = get_conn()
+                cur = con.cursor()
+                ph  = "%s" if tipo == "pg" else "?"
+                salvos = 0
+                for _, row in df_salvar.iterrows():
+                    cur.execute(
+                        f"INSERT INTO fotos (arquivo,rodovia,km_real,sentido,latitude,longitude,degrau,data,ocr_bruto) VALUES ({ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph},{ph})",
+                        (row.get("Arquivo"), row.get("Rodovia"), row.get("KM Real"),
+                         row.get("Sentido"), row.get("Latitude"), row.get("Longitude"),
+                         row.get("Degrau"),  row.get("Data"),    row.get("OCR Bruto"))
+                    )
+                    salvos += 1
+                con.commit(); con.close()
+                carregar_dados.clear()
+                st.success(f"✅ {salvos} registros salvos no banco!")
+                st.session_state.pop("massa_dados", None)
+                st.session_state.pop("massa_fila",  None)
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao salvar: {e}")
+
+        if bb.button("🗑️ Limpar e recomeçar", use_container_width=True):
+            for k in ["massa_dados", "massa_fila", "massa_processando",
+                      "massa_total", "massa_erros", "massa_salvar_auto"]:
+                st.session_state.pop(k, None)
+            st.rerun()
+
+        # Exportar resultado como CSV
+        csv = df_res[["Arquivo","Rodovia","KM Real","Sentido",
+                      "Latitude","Longitude","Data","Status"]].to_csv(index=False).encode("utf-8")
+        st.download_button("⬇️ Exportar resultado CSV", csv, "resultado_massa.csv", "text/csv")
 
     st.markdown('<div class="vr-footer">Sistema de Inventário de Degraus · Todos os direitos reservados</div>', unsafe_allow_html=True)
