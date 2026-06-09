@@ -870,57 +870,83 @@ elif pagina == "Pontos Cadastrados":
             )
 
             idx_ativo = min(st.session_state.get("pts_linha", 0), max(0, len(pts_editado) - 1))
-            row_ativo = pts_editado.iloc[idx_ativo] if len(pts_editado) > 0 else pts_df.iloc[0]
 
-            ba, bb, bc = st.columns(3)
+            ba, bb = st.columns(2)
 
             if ba.button("✅ Aplicar edições", use_container_width=True, key="pts_aplicar"):
                 st.session_state["pts_df"] = pts_editado.copy()
                 st.success("Edições aplicadas.")
                 st.rerun()
 
+            if bb.button("💾 Salvar no banco", use_container_width=True, key="pts_salvar"):
+                try:
+                    con, tipo = get_conn()
+                    cur = con.cursor()
+                    ph = "%s" if tipo == "pg" else "?"
+                    for _, r in pts_editado.iterrows():
+                        cur.execute(
+                            f"UPDATE fotos SET rodovia={ph}, km_real={ph}, sentido={ph}, latitude={ph}, longitude={ph}, degrau={ph}, data={ph} WHERE arquivo={ph}",
+                            (r.get("Rodovia"), r.get("KM Real"), r.get("Sentido"),
+                             r.get("Latitude"), r.get("Longitude"), r.get("Degrau (mm)"),
+                             r.get("Data"), r.get("Arquivo"))
+                        )
+                    con.commit(); con.close()
+                    carregar_dados.clear()
+                    st.success("Alterações salvas!")
+                    st.session_state.pop("pts_df", None)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro: {e}")
 
-            # Seletor de linha para excluir
+            # ── Excluir com checkbox por linha ─────────────────────────────────
             st.markdown("<hr class='vr-divider'>", unsafe_allow_html=True)
-            _section("🗑️ Excluir registro")
+            _section("🗑️ Excluir registros")
 
-            nomes_disponiveis = pts_editado["Arquivo"].tolist()
-            arquivo_excluir = st.selectbox(
-                "Selecione o registro para excluir:",
-                options=nomes_disponiveis,
-                key="pts_sel_excluir"
+            # Tabela com checkbox de seleção
+            df_check = pts_editado[["Arquivo", "Rodovia", "KM Real", "Sentido", "Degrau (mm)"]].copy()
+            df_check.insert(0, "Excluir", False)
+
+            df_selecionado = st.data_editor(
+                df_check,
+                use_container_width=True,
+                num_rows="fixed",
+                hide_index=True,
+                key="pts_check_excluir",
+                column_config={
+                    "Excluir":     st.column_config.CheckboxColumn("🗑️", help="Marque para excluir", width="small"),
+                    "Arquivo":     st.column_config.TextColumn(disabled=True),
+                    "Rodovia":     st.column_config.TextColumn(disabled=True),
+                    "KM Real":     st.column_config.NumberColumn(disabled=True, format="%.3f"),
+                    "Sentido":     st.column_config.TextColumn(disabled=True),
+                    "Degrau (mm)": st.column_config.NumberColumn(disabled=True, format="%.1f mm"),
+                }
             )
 
-            if not st.session_state.get("pts_confirmar_exclusao", False):
-                st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
-                if st.button("🗑️ Apagar registro selecionado", use_container_width=True, key="pts_apagar_btn"):
-                    st.session_state["pts_confirmar_exclusao"] = True
-                    st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-            else:
-                st.warning(f"⚠️ Confirma exclusão de **{arquivo_excluir}**?")
+            selecionados = df_selecionado[df_selecionado["Excluir"] == True]["Arquivo"].tolist()
+
+            if selecionados:
+                st.warning(f"⚠️ {len(selecionados)} registro(s) marcado(s): **{', '.join(selecionados[:3])}{'...' if len(selecionados) > 3 else ''}**")
                 col_sim, col_nao = st.columns(2)
                 with col_sim:
                     st.markdown('<div class="btn-danger">', unsafe_allow_html=True)
-                    if st.button("✔️ Sim, apagar", use_container_width=True, key="pts_confirmar_sim"):
+                    if st.button(f"✔️ Confirmar exclusão ({len(selecionados)})", use_container_width=True, key="pts_confirmar_sim"):
                         try:
                             con, tipo = get_conn()
                             cur = con.cursor()
                             ph = "%s" if tipo == "pg" else "?"
-                            cur.execute(f"DELETE FROM fotos WHERE arquivo = {ph}", (arquivo_excluir,))
+                            for arq in selecionados:
+                                cur.execute(f"DELETE FROM fotos WHERE arquivo = {ph}", (arq,))
                             con.commit(); con.close()
                             carregar_dados.clear()
                             st.session_state.pop("pts_df", None)
                             st.session_state["pts_linha"] = 0
-                            st.session_state["pts_confirmar_exclusao"] = False
-                            st.success("Registro apagado.")
+                            st.success(f"✅ {len(selecionados)} registro(s) apagado(s).")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Erro: {e}")
                     st.markdown('</div>', unsafe_allow_html=True)
                 with col_nao:
                     if st.button("✖️ Cancelar", use_container_width=True, key="pts_confirmar_nao"):
-                        st.session_state["pts_confirmar_exclusao"] = False
                         st.rerun()
 
 
@@ -1059,10 +1085,16 @@ elif pagina == "Cadastrar Fotos":
 
     def extrair_sentido(texto):
         t = texto.upper()
-        if re.search(r'\bPS\b', t): return "Sul"
-        if re.search(r'\bPN\b', t): return "Norte"
-        if re.search(r'\bPL\b', t): return "Leste"
-        if re.search(r'\bPO\b', t): return "Oeste"
+
+        # ── Sul ───────────────────────────────────────────────────
+        if re.search(r'\b(PS|P\.S|PISTA\s+SUL|SENTIDO\s+SUL|\bSUL\b)\b', t): return "Sul"
+        # ── Norte ─────────────────────────────────────────────────
+        if re.search(r'\b(PN|P\.N|PISTA\s+NORTE|SENTIDO\s+NORTE|\bNORTE\b)\b', t): return "Norte"
+        # ── Leste ─────────────────────────────────────────────────
+        if re.search(r'\b(PL|P\.L|PISTA\s+LESTE|SENTIDO\s+LESTE|\bLESTE\b|CX\s*L|\bL\b)\b', t): return "Leste"
+        # ── Oeste ─────────────────────────────────────────────────
+        if re.search(r'\b(PO|P\.O|PISTA\s+OESTE|SENTIDO\s+OESTE|\bOESTE\b|CX\s*O|\bO\b)\b', t): return "Oeste"
+
         return None
 
     def extrair_data(texto):
